@@ -1,0 +1,54 @@
+{
+  "jobs": [
+    {
+      "name": "QG resume des topics",
+      "schedule": {
+        "kind": "cron",
+        "expr": "45 7 * * *",
+        "display": "45 7 * * *"
+      },
+      "schedule_display": "45 7 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 64
+      },
+      "deliver": "local",
+      "script": "qg-resumer.py",
+      "enabled": true
+    },
+    {
+      "name": "Coach quotidien focus",
+      "prompt": "Envoie a USER le texte du coach ci-dessus, tel quel, sans rien ajouter ni commenter.",
+      "schedule": {
+        "kind": "cron",
+        "expr": "52 7 * * *",
+        "display": "52 7 * * *"
+      },
+      "schedule_display": "52 7 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 2
+      },
+      "deliver": "telegram:__QG_CHAT__:__COACH_THREAD__",
+      "script": "focus-coach.py",
+      "enabled": false
+    },
+    {
+      "name": "Veille IA et GitHub",
+      "prompt": "Tu rédiges la veille IA et GitHub de USER, pour le topic Coach de son QG Telegram. Les données collectées sont juste au-dessus.\n\nQui est USER : il construit seul avec des agents (Claude Code, un agent Telegram, un proxy Claude local). Adapte la veille à ses projets en cours.\n\nTa tâche :\n1. Garde 5 à 7 éléments au maximum. Critère : utile ou marquant pour lui. Écarte le bruit, les clones, les dépôts sans lien avec l'IA ou le dev, et ce qu'il ne pourra jamais utiliser.\n2. Range-les en 2 blocs : « À tester » (il peut l'essayer ou le brancher cette semaine) et « À savoir » (tendance, sortie de modèle, papier).\n3. Pour chaque élément : le nom en gras avec le lien, puis 1 phrase sur ce que c'est, puis 1 phrase sur ce que ça change pour lui, en nommant le projet concerné.\n4. Les mises à jour de Claude Code et d'Hermès : 1 ligne seulement, et seulement si une nouveauté le concerne.\n5. Termine par 1 ligne « Le plus utile pour toi : » avec l'élément à regarder en premier.\n\nStyle obligatoire : français, phrases de 15 mots maximum, aucun émoji, aucun tiret long (utilise « : » ou « · »), aucun préambule. Titre : « Veille IA · <date du jour> ».\nSi vraiment rien ne mérite son attention, réponds exactement [SILENT] et rien d'autre.",
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 9,19 * * *",
+        "display": "35 9,19 * * *"
+      },
+      "schedule_display": "35 9,19 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 65
+      },
+      "deliver": "telegram:__QG_CHAT__:__QG_THREAD__",
+      "script": "veille-ia.py",
+      "enabled": false
+    }
+  ]
+}

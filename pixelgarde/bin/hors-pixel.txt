@@ -1,0 +1,4 @@
+# Telephones hors Pixel : le verrou /tmp/pixel-stop ne les concerne pas.
+# Une adresse par ligne (IP LAN ou Tailscale, ou numero de serie USB).
+__LAN_IP__  A07 EntrepriseA, LAN bureau
+__TS_IP__  A07 EntrepriseA, Tailscale (tous reseaux)

@@ -1,0 +1,8 @@
+[Unit]
+Description=Essai hebdo de mise a jour d'Hermes (sans rien changer au service)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.hermes/scripts/hermes-maj-hebdo.sh
+TimeoutStartSec=45min
+Nice=10

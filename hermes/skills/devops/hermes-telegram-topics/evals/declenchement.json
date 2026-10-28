@@ -1,0 +1,8 @@
+[
+  {"query": "Créer un topic nommé audiotruth", "should_trigger": true},
+  {"query": "renomme ce topic en Compta", "should_trigger": true},
+  {"query": "mets ce topic en muet, il me spamme", "should_trigger": true},
+  {"query": "Prime Agent ne répond plus dans son topic, regarde le pont", "should_trigger": false},
+  {"query": "écris un mail de relance à l'usine", "should_trigger": false},
+  {"query": "combien de tokens Hermès a consommé hier ?", "should_trigger": false}
+]

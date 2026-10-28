@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Agent control</string>
+    <string name="missions_label">Home</string>
+    <string name="reveil_label">Creeper</string>
+
+    <string name="panneau_termine">Done</string>
+    <string name="panneau_ajouter">Add</string>
+    <string name="panneau_ajouter_app">‹  Add an app</string>
+    <string name="panneau_chercher">Search apps</string>
+    <string name="panneau_aucune">No apps</string>
+
+    <string name="missions_sans_relais">Relay not set up: Home goes through it.</string>
+
+    <string name="avis_canal">QG reports</string>
+    <string name="avis_canal_desc">A report is waiting to be read aloud</string>
+    <string name="avis_defaut">Report waiting</string>
+    <string name="avis_lire">Read</string>
+    <string name="avis_lire_rapport">Read the report</string>
+
+    <string name="recepteur_canal">Agent control</string>
+    <string name="recepteur_canal_desc">Stop button for remote control</string>
+    <string name="recepteur_titre_pause">Control PAUSED</string>
+    <string name="recepteur_titre_actif">Agent control active</string>
+    <string name="recepteur_texte_pause">The agent no longer touches anything.</string>
+    <string name="recepteur_texte_actif">It can act on the phone.</string>
+    <string name="recepteur_reprendre">RESUME</string>
+    <string name="recepteur_arreter">STOP</string>
+
+    <string name="lecteur_titre">Reading</string>
+    <string name="lecteur_rien">%1$s: nothing to read.</string>
+    <string name="lecteur_arreter">Stop</string>
+    <string name="lecteur_precedent">Previous</string>
+    <string name="lecteur_pause">Pause</string>
+    <string name="lecteur_lire">Play</string>
+    <string name="lecteur_suivant">Next</string>
+    <string name="lecteur_canal">Reading aloud</string>
+</resources>

@@ -1,0 +1,10 @@
+[
+  {"query": "on vient de réussir le téléchargement des rapports Konvy, transforme ça en skill pour que la prochaine session le refasse seule", "should_trigger": true},
+  {"query": "est-ce que tu as un skill pour t'aider à faire des skills de bonne qualité ? fais-en un", "should_trigger": true},
+  {"query": "la skill fil ne s'est pas chargée quand j'ai dit je t'avais dit, pourquoi ? répare sa description", "should_trigger": true},
+  {"query": "revois toutes mes skills, dis-moi lesquelles ne servent à rien et lesquelles se déclenchent mal", "should_trigger": true},
+  {"query": "capitalise ce qu'on a appris sur le portail Watsons, que ce soit réutilisable", "should_trigger": true},
+  {"query": "cherche dans le fil ce que je t'avais dit sur le prix du kit HandsFold", "should_trigger": false},
+  {"query": "lance une étude marketing sur le slogan MARQUE-E pour TikTok", "should_trigger": false},
+  {"query": "écris un script python qui renomme les factures Watsons du dossier 01-finance par date", "should_trigger": false}
+]

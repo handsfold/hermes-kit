@@ -1,0 +1,174 @@
+From 4276156e48c03c186da1eff64108149a5ce14a33 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Passerelle : l'override /model d'un topic survit au
+ redemarrage et a /new
+
+Les overrides /model par session sont ecrits dans gateway_model_overrides.json
+(0600, api_key comprise) et rechargees au demarrage. _clear_conversation_scope
+conserve l'override du modele (/new, /resume, auto-reset ne vident que le
+contexte), l'override /reasoning reste efface. Test de reset adapte.
+
+Retouche: R02
+---
+ gateway/run.py                            | 51 +++++++++++++++++++++++
+ gateway/run_agent_cache.py                | 15 +++++++
+ gateway/slash_commands_model.py           |  7 ++++
+ tests/gateway/test_session_model_reset.py | 13 ++++--
+ 4 files changed, 83 insertions(+), 3 deletions(-)
+
+diff --git a/gateway/run.py b/gateway/run.py
+index e91aade0b4..eb8b50a35c 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -3436,6 +3436,9 @@ class GatewayRunner(
+         self._executor_closing = False
+         # ALL per-session state lives here (gateway/session_state.py); use _session_state / _peek_session_state.
+         self._sessions: Dict[str, SessionState] = {}
++        # Per-session /model overrides reloaded from disk, so a switch made
++        # before a restart still applies to the same conversation.
++        self._session_model_overrides = self._load_model_overrides()
+         # Per-SESSION_ID turn lease: serializes [load history → run → flush] when two ROUTING KEYS resolve
+         # to one session_id (switch_session's many-to-one mapping), which routing-key guards cannot see.
+         self._turn_leases = SessionTurnLeaseRegistry()
+@@ -3782,6 +3785,54 @@ class GatewayRunner(
+ 
+     _VOICE_MODE_PATH = _hermes_home / "gateway_voice_mode.json"
+ 
++    # Session model override persistence
++    _MODEL_OVERRIDE_PATH = _hermes_home / "gateway_model_overrides.json"
++
++    def _load_model_overrides(self) -> Dict[str, Dict[str, str]]:
++        """Restore per-session /model overrides written by a previous run.
++
++        Session keys are deterministic (derived from platform/chat/user), so a
++        switch made before a restart still matches the same conversation.
++        """
++        try:
++            data = json.loads(self._MODEL_OVERRIDE_PATH.read_text(encoding="utf-8"))
++        except (FileNotFoundError, json.JSONDecodeError, OSError):
++            return {}
++        if not isinstance(data, dict):
++            return {}
++        result: Dict[str, Dict[str, str]] = {}
++        for session_key, override in data.items():
++            if not isinstance(session_key, str) or not session_key:
++                continue
++            if not isinstance(override, dict):
++                continue
++            if not override.get("model"):
++                continue
++            result[session_key] = {
++                k: v for k, v in override.items()
++                if k in ("model", "provider", "api_key", "base_url", "api_mode")
++            }
++        if result:
++            logger.info("Restored %d persisted session model override(s).", len(result))
++        return result
++
++    def _save_model_overrides(self) -> None:
++        """Persist ``_session_model_overrides`` to disk (0600 : holds api keys)."""
++        try:
++            path = self._MODEL_OVERRIDE_PATH
++            path.parent.mkdir(parents=True, exist_ok=True)
++            tmp = path.with_suffix(".json.tmp")
++            # dict() : _session_model_overrides is a live view over SessionState,
++            # not a plain dict, and json cannot serialise the view itself.
++            tmp.write_text(json.dumps(dict(self._session_model_overrides), indent=2), encoding="utf-8")
++            try:
++                os.chmod(tmp, 0o600)
++            except OSError:
++                pass
++            tmp.replace(path)
++        except Exception as e:  # noqa: BLE001 - best effort, jamais bloquant
++            logger.warning("Failed to save session model overrides: %s", e)
++
+     should_exit_cleanly = property(lambda self: self._exit_cleanly)
+     should_exit_with_failure = property(lambda self: self._exit_with_failure)
+     exit_reason = property(lambda self: self._exit_reason)
+diff --git a/gateway/run_agent_cache.py b/gateway/run_agent_cache.py
+index be24d79f3d..6fc2a98a66 100644
+--- a/gateway/run_agent_cache.py
++++ b/gateway/run_agent_cache.py
+@@ -349,6 +349,15 @@ class GatewayAgentCacheMixin:
+         from gateway.run import _CONVERSATION_SCOPED_STATE
+         if not session_key:
+             return
++        # L'override /model du topic survit a la frontiere de conversation.
++        # Choix local : /new, /resume et l'auto-reset ne vident que le contexte.
++        # Le modele choisi pour le topic (par exemple pyrit) reste en place,
++        # sinon chaque reset le ramenait au modele par defaut et il fallait
++        # retaper /model. L'override /reasoning, lui, est bien efface.
++        try:
++            _garde_modele = (getattr(self, "_session_model_overrides", None) or {}).get(session_key)
++        except Exception:  # noqa: BLE001 - un reset ne doit jamais echouer ici
++            _garde_modele = None
+         state = self._peek_session_state(session_key)
+         if state is not None:
+             state.conversation.clear()
+@@ -360,6 +369,12 @@ class GatewayAgentCacheMixin:
+             if isinstance(store, dict):
+                 store.pop(session_key, None)
+         self._clear_session_boundary_security_state(session_key)
++        if _garde_modele:
++            try:
++                self._session_model_overrides[session_key] = _garde_modele
++                self._save_model_overrides()
++            except Exception:  # noqa: BLE001
++                logger.debug("Override /model non restaure pour %s", session_key)
+         logger.debug("Cleared conversation scope for %s (%s)", session_key, reason)
+ 
+     def _clear_session_boundary_security_state(self, session_key: str) -> None:
+diff --git a/gateway/slash_commands_model.py b/gateway/slash_commands_model.py
+index 1491e62fb6..da6a1d5d18 100644
+--- a/gateway/slash_commands_model.py
++++ b/gateway/slash_commands_model.py
+@@ -253,6 +253,13 @@ class GatewayModelCommandsMixin:
+                 )
+             except Exception:
+                 logger.debug("Failed to persist session model override", exc_info=True)
++            # Miroir sur disque (0600) : recharge au demarrage par
++            # _load_model_overrides, api_key comprise, pour que le topic
++            # retrouve son modele apres un redemarrage du gateway.
++            try:
++                self._save_model_overrides()
++            except Exception:  # noqa: BLE001 - jamais bloquant
++                logger.debug("Failed to mirror session model override to disk", exc_info=True)
+         self._evict_cached_agent(ctx.session_key)  # next turn builds fresh from the override
+         if ctx.persist_global:
+             try:
+diff --git a/tests/gateway/test_session_model_reset.py b/tests/gateway/test_session_model_reset.py
+index 40c2903bd8..d6b03f6cae 100644
+--- a/tests/gateway/test_session_model_reset.py
++++ b/tests/gateway/test_session_model_reset.py
+@@ -1,4 +1,10 @@
+-"""Tests that /new (and its /reset alias) clears session-scoped overrides."""
++"""Tests that /new (and its /reset alias) clears session-scoped overrides.
++
++Exception locale : l'override /model du topic SURVIT a /new. Le reset ne vide
++que le contexte de la conversation ; le modele choisi (par exemple pyrit) reste
++en place, sinon il fallait retaper /model apres chaque reset.
++Voir _clear_conversation_scope dans gateway/run_agent_cache.py.
++"""
+ from datetime import datetime
+ from types import SimpleNamespace
+ from unittest.mock import AsyncMock, MagicMock
+@@ -68,7 +74,7 @@ def _make_runner():
+ 
+ @pytest.mark.asyncio
+ async def test_new_command_only_clears_own_session():
+-    """/new must only clear the override for the session that triggered it."""
++    """/new ne touche qu'a sa propre session, et garde l'override /model."""
+     runner = _make_runner()
+     session_key = build_session_key(_make_source())
+     other_key = "other_session_key"
+@@ -94,7 +100,8 @@ async def test_new_command_only_clears_own_session():
+ 
+     await runner._handle_reset_command(_make_event("/new"))
+ 
+-    assert session_key not in runner._session_model_overrides
++    # L'override /model du topic survit au reset (choix local).
++    assert runner._session_model_overrides[session_key]["model"] == "gpt-4o"
+     assert other_key in runner._session_model_overrides
+     assert session_key not in runner._session_reasoning_overrides
+     assert other_key in runner._session_reasoning_overrides

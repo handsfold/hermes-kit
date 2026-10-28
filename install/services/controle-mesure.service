@@ -1,0 +1,9 @@
+[Unit]
+Description=Controle de la mesure : routines qui appellent un modele sans se nommer au proxy
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.claude/outils/controle-mesure.py
+TimeoutStartSec=600
+# sortie 1 = ecart trouve, pas une panne
+SuccessExitStatus=1

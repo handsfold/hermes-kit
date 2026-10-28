@@ -1,0 +1,24 @@
+## Dépendances JS : pnpm, jamais npm
+
+```bash
+pnpm install --frozen-lockfile     # installer (refuse de modifier le lock)
+pnpm add <paquet>                  # ajouter
+sfw pnpm add <paquet>              # avec le pare-feu Socket, si sfw est là
+pnpm why <paquet>                  # qui tire ce paquet ?
+```
+
+`npm`, `yarn` et `npx` sans `--no-install` sont **bloqués** par
+`.claude/hooks/bash_guard.py`. Ce n'est pas une préférence de style : une
+installation npm exécute les scripts de toute la fermeture transitive, y compris
+des paquets qu'on n'a jamais choisis. Les garde-fous sont dans
+`pnpm-workspace.yaml` : délai de 7 jours avant d'accepter une version fraîche,
+scripts d'installation interdits par défaut, sources exotiques bloquées dans les
+dépendances profondes. Section 10 du socle pour le raisonnement complet.
+
+Trois réflexes :
+- `pnpm-lock.yaml` **se commite**. C'est lui qui fige les dépendances transitives.
+- Après un ajout, lire `git diff pnpm-lock.yaml` : un paquet sans rapport avec ce
+  qu'on installe est un signal.
+- Un script de build ne s'approuve qu'après l'avoir regardé : `pnpm approve-builds`.
+  Jamais « pour que ça passe ».
+

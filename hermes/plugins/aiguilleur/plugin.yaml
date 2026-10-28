@@ -1,0 +1,5 @@
+name: aiguilleur
+version: 1.0.0
+description: "Choisit la skill d'un message avant le modele (Sonnet sur le catalogue complet, repli mots-cles) et injecte son SKILL.md dans le tour."
+author: hermes-kit
+kind: standalone

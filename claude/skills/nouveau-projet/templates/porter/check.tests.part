@@ -1,0 +1,16 @@
+  # pytest sort 5 quand il ne collecte RIEN. Une suite vide n'est pas une suite
+  # verte : c'est le défaut de --passWithNoTests, qu'on refuse ici aussi.
+  tests_courants() {
+    "$PY" -m pytest @@TESTS@@ -q -m "not slow"
+    local code=$?
+    if [ "$code" = "5" ]; then
+      echo "  Aucun test collecté. Le filet ne protège rien tant qu'il est vide."
+      return 1
+    fi
+    return "$code"
+  }
+  if outil_absent pytest; then
+    manque "Tests"
+  else
+    etape "Tests (@@TESTS@@)" tests_courants
+  fi

@@ -1,0 +1,35 @@
+# Reglages proteges (exemple) : ce que la migration de config d'Hermes ne doit jamais changer.
+# Cle pointee -> valeur attendue. Aucun secret, aucun modele, aucune adresse.
+# hermes-verif.sh compare, hermes-maj-sure.sh reapplique apres chaque migration.
+# Copie ce fichier en ~/.hermes/maj/reglages-proteges.yaml, puis ajoute TES reglages
+# (modele, personnalite...). L'installateur le fait une fois, sans jamais l'ecraser ensuite.
+agent.max_turns: 90
+agent.restart_drain_timeout: 60
+agent.gateway_notify_interval: 300
+agent.gateway_timeout: 1800
+compression:
+  enabled: true
+  context_timeout_seconds: 420
+  context_total_ceiling_seconds: 1800
+  threshold: 0.2
+  target_ratio: 0.2
+  protect_last_n: 10
+plugins:
+  enabled:
+  - telegram-menus
+  - mode-objectif
+platforms.telegram.extra.command_menu:
+  max_commands: 20
+  priority_mode: replace
+  priority:
+  - menu
+  - supp
+  - new
+  - sessions
+  - resume
+  - status
+  - model
+  - reasoning
+  - usage
+  - stop
+  - help

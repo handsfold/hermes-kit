@@ -1,0 +1,33 @@
+From 58ec9de4cc31dab88235e4fb0293bb66950bf47a Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Selecteur de modeles : un provider declare dans providers:
+ n'est plus compte deux fois
+
+get_compatible_custom_providers() re-expose chaque bloc providers: comme une
+entree custom taguee provider_key. _configured_provider_matches les ecarte,
+sinon un provider apparaissait en double (routeur + custom:Nom).
+
+Retouche: R04
+---
+ hermes_cli/model_switch.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/hermes_cli/model_switch.py b/hermes_cli/model_switch.py
+index e019505746..619247aaeb 100644
+--- a/hermes_cli/model_switch.py
++++ b/hermes_cli/model_switch.py
+@@ -857,8 +857,12 @@ def _configured_provider_matches(
+     if isinstance(user_providers, dict):
+         candidates += [(slug, cfg) for slug, cfg in user_providers.items()
+                        if isinstance(slug, str) and isinstance(cfg, dict)]
++    # get_compatible_custom_providers() re-exposes every ``providers:`` block as a custom entry
++    # tagged with ``provider_key``: skip those, or one provider counts twice (routeur + custom:Name).
++    native = {s.strip().lower() for s, _ in candidates}
+     candidates += [(f"custom:{e['name']}", e) for e in _custom_entries(custom_providers)
+-                   if isinstance(e.get("name"), str) and e["name"].strip()]
++                   if isinstance(e.get("name"), str) and e["name"].strip()
++                   and str(e.get("provider_key") or "").strip().lower() not in native]
+ 
+     matches: dict[str, str] = {}
+     for slug, cfg in candidates:

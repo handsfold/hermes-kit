@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'icone de l'appli : la meme tete de creeper que la pastille.
+     Elle compte plus qu'il n'y parait : depuis Android 13, c'est ELLE que le
+     panneau des notifications affiche en gros a gauche de chaque avis, pas la
+     petite icone de Museau. Sans elle, un rapport en attente s'annoncait sous
+     le robot vert generique. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/creeper_fond" />
+    <foreground android:drawable="@mipmap/creeper_avant" />
+</adaptive-icon>

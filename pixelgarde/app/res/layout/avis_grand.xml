@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La carte depliee : le meme bouton, mais le resume respire sur six lignes.
+     C'est la vue que USER regarde quand il hesite entre plusieurs rapports. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/avis_titre"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/avis_texte"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification"
+        android:maxLines="6"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/avis_lire"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/pilule"
+        android:drawableStart="@drawable/jouer"
+        android:drawablePadding="8dp"
+        android:paddingStart="18dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="9dp"
+        android:text="@string/avis_lire_rapport"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</LinearLayout>

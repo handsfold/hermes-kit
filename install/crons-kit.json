@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "name": "Statistiques du kit (si consenties)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "23 * * * *",
+        "display": "23 * * * *"
+      },
+      "schedule_display": "23 * * * *",
+      "repeat": {
+        "times": null,
+        "completed": 0
+      },
+      "deliver": "local",
+      "script": "hk-telemetrie.py",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[Unit]
+Description=Sentinelle des systemes de revue (alerte au QG seulement si l'un ne produit plus rien)
+OnFailure=alerte-panne@%n.service
+
+[Service]
+Type=oneshot
+Environment=PATH=$HOME/.local/bin:$HOME/bin:$HOME/Bureau/Projets/contexte/bin:$HOME/Bureau/Projets/contexte/bin/qg:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 $HOME/.claude/outils/sentinelle-revue.py

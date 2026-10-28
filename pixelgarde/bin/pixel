@@ -1,0 +1,1164 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""pixel - pilotage complet du Pixel 9 Pro XL depuis n'importe quel poste.
+
+Remplace pixel-ctl.sh : meme logique de ciblage par texte, mais couvre aussi
+les notifications, le presse-papier, les SMS, les appels, les fichiers, les
+reglages systeme et l'installation d'applications.
+
+Aucun root requis : tout passe par adb (input, uiautomator, screencap, cmd, am).
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import xml.etree.ElementTree as ET
+
+ADRESSES = ["__PIXEL_IP__:5555", "__LAN_IP__:5555"]
+CACHE = "/tmp/pixel-adresse"
+UI_XML = "/tmp/pixel-ui.xml"
+
+# Le garde (voir pixel-garde) ecoute /dev/input et pose ces deux temoins.
+G_HUMAIN = "/tmp/pixel-humain"
+G_STOP = "/tmp/pixel-stop"
+G_PID = "/tmp/pixel-garde.pid"
+# Qui a la main, a cet instant : veille | attente | pilote. Le garde le lit et
+# repeint la pastille. Un fichier, pas une diffusion adb : ecrire coute 0 ms,
+# et le CLI ne doit jamais payer l'affichage.
+G_ETAT = "/tmp/pixel-etat"
+SILENCE = float(os.environ.get("PIXEL_SILENCE", "2.5"))
+ATTENTE_MAX = float(os.environ.get("PIXEL_ATTENTE_MAX", "180"))
+
+# Commandes qui touchent au telephone : elles cedent le pas a l'humain.
+MUTANTES = {
+    "click", "tap", "swipe", "scroll", "saisir", "touche", "open", "stop",
+    "install", "desinstalle", "envoie-sms", "appelle", "raccroche", "reglage",
+    "reveille", "dort", "deverrouille", "prive", "clavier-install",
+    "clavier-normal", "video",
+}
+
+
+# ------------------------------------------------------------------- garde
+
+def garde_tourne():
+    try:
+        os.kill(int(open(G_PID).read()), 0)
+        return True
+    except (OSError, ValueError, FileNotFoundError):
+        return False
+
+
+def depuis_toucher():
+    """Secondes ecoulees depuis le dernier contact d'un vrai doigt."""
+    try:
+        return time.time() - os.path.getmtime(G_HUMAIN)
+    except OSError:
+        return 1e9
+
+
+def poser_etat(mot):
+    """Dire qui a la main. Le garde s'occupe de le montrer, en asynchrone."""
+    try:
+        with open(G_ETAT, "w") as f:
+            f.write(mot)
+    except OSError:
+        pass
+
+
+def refus_stop():
+    sortir("ARRET D'URGENCE arme : le telephone est a toi, je n'y touche pas.\n"
+           "Pour me rendre la main : pixel go")
+
+
+def attendre_calme():
+    """Ne jamais agir en meme temps que l'humain. Sa main passe avant."""
+    if os.environ.get("PIXEL_SANS_GARDE"):
+        return
+    if os.path.exists(G_STOP):
+        refus_stop()
+    if not garde_tourne():
+        return                       # pas de garde : on n'invente pas de blocage
+    debut, prevenu = time.time(), False
+    while depuis_toucher() < SILENCE:
+        if os.path.exists(G_STOP):
+            refus_stop()
+        if not prevenu:
+            poser_etat("attente")
+            print("l'humain a la main, j'attends qu'il ait fini...",
+                  file=sys.stderr)
+            prevenu = True
+        if time.time() - debut > ATTENTE_MAX:
+            sortir(f"telephone occupe sans interruption depuis "
+                   f"{ATTENTE_MAX:.0f} s : j'abandonne l'action.")
+        time.sleep(0.3)
+    if prevenu:
+        print(f"calme revenu apres {time.time() - debut:.1f} s, je reprends.",
+              file=sys.stderr)
+
+
+# ---------------------------------------------------------------- connexion
+
+def trouver_adb():
+    for c in (os.environ.get("ADB"), shutil.which("adb"),
+              os.path.expanduser("~/.local/platform-tools/adb"),
+              "/usr/bin/adb"):
+        if c and os.path.exists(c):
+            return c
+    sortir("adb introuvable. Installer : sudo apt install adb")
+
+
+ADB = trouver_adb()
+
+
+def sortir(msg, code=1):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+# Le binaire adb est desormais un garde-fou (bin/pixel/adb-garde, installe en
+# /usr/local/bin/adb) : il refuse TOUT appel quand /tmp/pixel-stop existe, quel
+# que soit l'appelant. C'est ce qui empeche un autre agent de piloter le
+# telephone pendant que USER l'a mis en pause. Seule exception : repeindre la
+# pastille, sans quoi USER ne verrait jamais le bouton REPRENDRE.
+PRIV = False
+
+
+def brut(args, timeout=30, texte=True):
+    env = None
+    if PRIV:
+        env = dict(os.environ, PIXEL_GARDE="1")
+    return subprocess.run([ADB] + args, capture_output=True, text=texte,
+                          timeout=timeout, env=env)
+
+
+def joignable(addr):
+    try:
+        r = subprocess.run([ADB, "-s", addr, "shell", "true"],
+                           capture_output=True, timeout=8)
+        return r.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def deja_connecte():
+    """Un appareil deja dans `adb devices` : l'IP LAN bouge, la liste figee ment.
+
+    Filtre sur le modele : le 23/09 au soir un Samsung A07 branche en ADB
+    sans fil est passe premier dans la liste, et le garde a ecoute ce
+    telephone-la toute la nuit (pastille "hote-1 muet" sur le Pixel).
+    """
+    r = brut(["devices", "-l"], timeout=8)
+    for l in (r.stdout or "").splitlines()[1:]:
+        parts = l.split()
+        if len(parts) < 2 or parts[1] != "device" or ":" not in parts[0]:
+            continue
+        if "model:Pixel_9_Pro_XL" not in l:
+            continue
+        return parts[0]
+    return None
+
+
+def scanner_lan(port=5555):
+    """Balaye le /24 local quand l'IP du telephone a change de main."""
+    import socket, concurrent.futures as cf
+    base = None
+    for l in os.popen("ip -4 route get 1.1.1.1 2>/dev/null").read().split():
+        if l.count(".") == 3 and l.startswith("192.168."):
+            base = ".".join(l.split(".")[:3])
+            break
+    if not base:
+        return None
+    def teste(n):
+        s = socket.socket(); s.settimeout(0.4)
+        try:
+            s.connect((f"{base}.{n}", port)); return f"{base}.{n}:{port}"
+        except OSError:
+            return None
+        finally:
+            s.close()
+    with cf.ThreadPoolExecutor(max_workers=64) as ex:
+        for r in ex.map(teste, range(2, 255)):
+            if r:
+                return r
+    return None
+
+
+def resoudre():
+    """Trouve le telephone sans qu'on ait a connaitre son reseau."""
+    forcee = os.environ.get("PIXEL_ADDR")
+    if forcee:
+        return forcee
+    a = deja_connecte()
+    if a:
+        open(CACHE, "w").write(a)
+        return a
+    if os.path.exists(CACHE):
+        a = open(CACHE).read().strip()
+        if a and joignable(a):
+            return a
+    liste = os.environ.get("PIXEL_ADRESSES", "").split() or ADRESSES
+    for a in liste:
+        try:
+            subprocess.run([ADB, "connect", a], capture_output=True, timeout=8)
+        except subprocess.TimeoutExpired:
+            continue
+        if joignable(a):
+            open(CACHE, "w").write(a)
+            return a
+    trouve = scanner_lan()
+    if trouve:
+        subprocess.run([ADB, "connect", trouve], capture_output=True, timeout=8)
+        if joignable(trouve):
+            open(CACHE, "w").write(trouve)
+            return trouve
+    sortir("Telephone injoignable. Le debogage sans fil est-il allume ?\n"
+           "Essais : " + ", ".join(liste) + ", puis balayage du LAN")
+
+
+PHONE = None
+
+
+def sh(cmd, timeout=30):
+    """Execute une commande shell sur le telephone, renvoie stdout nettoye."""
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    r = brut(["-s", PHONE, "shell", cmd], timeout=timeout)
+    return r.stdout.replace("\r", "")
+
+
+# ---------------------------------------------------------------- lecture UI
+
+def dump_ui():
+    sh("uiautomator dump /sdcard/ui.xml")
+    brut(["-s", PHONE, "pull", "/sdcard/ui.xml", UI_XML], timeout=20)
+    try:
+        return ET.parse(UI_XML).getroot()
+    except Exception:
+        return None
+
+
+def taille_ecran():
+    m = re.search(r"(\d+)x(\d+)", sh("wm size"))
+    return (int(m.group(1)), int(m.group(2))) if m else (1080, 2400)
+
+
+def noeuds(racine, motif="", cliquables=False):
+    """Elements visibles correspondant au motif, exacts d'abord, puis de haut en bas."""
+    larg, haut = taille_ecran()
+    motif = motif.lower()
+    out = []
+    for n in racine.iter("node"):
+        txt = (n.get("text") or "").strip()
+        desc = (n.get("content-desc") or "").strip()
+        label = txt or desc
+        combine = (txt + " " + desc).strip().lower()
+        if motif and motif not in combine:
+            continue
+        if cliquables and n.get("clickable") != "true":
+            continue
+        if n.get("enabled") == "false":
+            continue
+        b = n.get("bounds") or ""
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", b)
+        if not m:
+            continue
+        x1, y1, x2, y2 = map(int, m.groups())
+        if x2 <= x1 or y2 <= y1:
+            continue
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        if not (0 <= cx < larg and 0 <= cy < haut - 40):
+            continue
+        rang = 0 if combine == motif else (1 if combine.startswith(motif) else 2)
+        out.append({"x": cx, "y": cy, "texte": label[:80], "rang": rang,
+                    "classe": (n.get("class") or "").split(".")[-1],
+                    "cliquable": n.get("clickable") == "true",
+                    "paquet": n.get("package") or ""})
+    out.sort(key=lambda e: (e["rang"], e["y"], e["x"]))
+    return out
+
+
+def stabiliser(tours=6):
+    """Attend que l'ecran cesse de bouger : cliquer pendant une animation rate la cible."""
+    precedent = None
+    for _ in range(tours):
+        r = dump_ui()
+        try:
+            courant = open(UI_XML, "rb").read()
+        except OSError:
+            courant = None
+        if courant and courant == precedent:
+            return r
+        precedent = courant
+        time.sleep(1)
+    return r
+
+
+# ---------------------------------------------------------------- saisie texte
+
+def echapper(t):
+    for a, b in [("\\", "\\\\"), (" ", "%s"), ("'", "\\'"), ('"', '\\"'),
+                 ("&", "\\&"), ("<", "\\<"), (">", "\\>"), ("(", "\\("),
+                 (")", "\\)"), ("|", "\\|"), (";", "\\;"), ("*", "\\*"),
+                 ("~", "\\~"), ("`", "\\`"), ("$", "\\$")]:
+        t = t.replace(a, b)
+    return t
+
+
+def clavier_adb_present():
+    return "com.android.adbkeyboard" in sh("ime list -a -s")
+
+
+def saisir(texte):
+    """Tape du texte. Passe par ADBKeyboard si le texte sort de l'ASCII."""
+    if any(ord(c) > 127 for c in texte):
+        if clavier_adb_present():
+            sh("ime enable com.android.adbkeyboard/.AdbIME")
+            sh("ime set com.android.adbkeyboard/.AdbIME")
+            b64 = __import__("base64").b64encode(texte.encode()).decode()
+            sh("am broadcast -a ADB_INPUT_B64 --es msg '%s'" % b64)
+            return "saisi (ADBKeyboard) : " + texte
+        return ("Texte non-ASCII et ADBKeyboard absent.\n"
+                "Installer : pixel clavier-install")
+    sh("input text '%s'" % echapper(texte))
+    return "saisi : " + texte
+
+
+TOUCHES = {"back": 4, "home": 3, "entree": 66, "enter": 66, "recents": 187,
+           "power": 26, "volup": 24, "voldown": 25, "menu": 82, "suppr": 67,
+           "tab": 61, "espace": 62, "recherche": 84, "camera": 27,
+           "play": 85, "suivant": 87, "precedent": 88, "muet": 164,
+           "haut": 19, "bas": 20, "gauche": 21, "droite": 22}
+
+
+# ---------------------------------------------------------------- commandes
+
+def c_etat(a):
+    focus = ""
+    for l in sh("dumpsys window").splitlines():
+        if "mCurrentFocus" in l:
+            focus = l.strip()
+            break
+    bat = dict(re.findall(r"^\s*(\w+):\s*(\S+)$", sh("dumpsys battery"), re.M))
+    ecran = "allume" if "true" in sh(
+        "dumpsys deviceidle get screen").lower() else "eteint"
+    verrou = "verrouille" if "true" in sh(
+        "dumpsys window | grep -m1 mDreamingLockscreen").lower() else "deverrouille"
+    larg, haut = taille_ecran()
+    print(f"adresse    : {PHONE}")
+    print(f"focus      : {focus}")
+    print(f"ecran      : {larg}x{haut}, {ecran}, {verrou}")
+    print(f"batterie   : {bat.get('level','?')}% ({bat.get('status','?')}), "
+          f"{int(bat.get('temperature', 0))/10:.1f}C")
+    print(f"modele     : {sh('getprop ro.product.model').strip()} "
+          f"/ Android {sh('getprop ro.build.version.release').strip()}")
+
+
+def c_ui(a):
+    r = dump_ui()
+    if r is None:
+        sortir("lecture de l'ecran impossible")
+    els = noeuds(r, "", a.cliquables)
+    if a.json:
+        print(json.dumps(els, ensure_ascii=False, indent=2))
+        return
+    for e in els:
+        if not e["texte"]:
+            continue
+        marque = "*" if e["cliquable"] else " "
+        print(f"{marque} [{e['x']},{e['y']}] {e['texte']}")
+
+
+def c_find(a):
+    r = dump_ui()
+    els = noeuds(r, " ".join(a.texte), True) or noeuds(r, " ".join(a.texte), False)
+    if not els:
+        sortir("introuvable : " + " ".join(a.texte))
+    for e in els[:10]:
+        print(f"[{e['x']},{e['y']}] {e['texte']}")
+
+
+def c_click(a):
+    motif = " ".join(a.texte)
+    r = stabiliser()
+    els = noeuds(r, motif, True) or noeuds(r, motif, False)
+    if not els:
+        sortir("introuvable : " + motif)
+    e = els[0]
+    sh(f"input tap {e['x']} {e['y']}")
+    print(f"clic [{e['x']},{e['y']}] {e['texte']}")
+
+
+def c_attendre(a):
+    motif = " ".join(a.texte)
+    for i in range(a.secondes):
+        r = dump_ui()
+        if r is not None and noeuds(r, motif):
+            print(f"apparu apres {i}s : {motif}")
+            return
+        time.sleep(1)
+    sortir(f"absent apres {a.secondes}s : {motif}")
+
+
+def clavier_visible():
+    """Le clavier mange le bas de l'ecran : y glisser tape des touches."""
+    d = sh("dumpsys input_method | grep -m1 mInputShown")
+    return "true" in d.lower()
+
+
+def hauteur_clavier():
+    """Haut du clavier en pixels, ou None s'il est absent."""
+    if not clavier_visible():
+        return None
+    larg, haut = taille_ecran()
+    r = dump_ui()
+    plus_haut = haut
+    if r is not None:
+        for n in r.iter("node"):
+            paquet = n.get("package") or ""
+            if "inputmethod" not in paquet and "keyboard" not in paquet.lower():
+                continue
+            m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.get("bounds") or "")
+            if m and int(m.group(4)) >= haut - 60:
+                plus_haut = min(plus_haut, int(m.group(2)))
+    return plus_haut if plus_haut < haut else int(haut * .55)
+
+
+def champ_recherche(racine):
+    """Un champ de saisie deja focalise : chercher vaut mieux que defiler."""
+    if racine is None:
+        return None
+    for n in racine.iter("node"):
+        if n.get("focused") == "true" and "EditText" in (n.get("class") or ""):
+            m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", n.get("bounds") or "")
+            if m:
+                x1, y1, x2, y2 = map(int, m.groups())
+                return {"x": (x1 + x2) // 2, "y": (y1 + y2) // 2,
+                        "texte": (n.get("text") or n.get("content-desc") or "")[:60]}
+    return None
+
+
+def c_scroll(a):
+    """Fait defiler jusqu'a voir un texte, en refusant de tourner en rond.
+
+    Trois garde-fous, appris a la dure :
+    - le clavier ouvert avale les swipes : on glisse au-dessus, ou on le ferme
+    - un champ de recherche focalise rend le defilement inutile : on le signale
+    - si l'ecran ne bouge plus, on s'arrete au lieu de rejouer le meme geste
+    """
+    larg, haut = taille_ecran()
+    x = larg // 2
+    racine = dump_ui()
+
+    if a.jusqu_a and racine is not None and noeuds(racine, a.jusqu_a):
+        print("deja visible : " + a.jusqu_a)
+        return
+
+    champ = champ_recherche(racine)
+    if champ and a.jusqu_a and not a.force:
+        sortir(f"champ de recherche actif [{champ['x']},{champ['y']}] : "
+               f"defiler ne sert a rien.\n"
+               f"Taper directement :  pixel saisir \"{a.jusqu_a[:12]}\"\n"
+               f"Forcer le defilement :  pixel scroll --force")
+
+    plafond = hauteur_clavier()
+    if plafond:
+        bas_utile = int(plafond * .90)
+        print(f"clavier detecte : defilement limite au-dessus de y={plafond}")
+    else:
+        bas_utile = int(haut * .80)
+    haut_utile = int(haut * .18)
+    if bas_utile - haut_utile < 200:
+        sortir("zone defilable trop courte (clavier ?). Fermer le clavier : "
+               "pixel touche back")
+
+    y1, y2 = (bas_utile, haut_utile) if a.sens == "bas" else (haut_utile, bas_utile)
+
+    empreinte = None
+    for i in range(a.max):
+        sh(f"input swipe {x} {y1} {x} {y2} 300")
+        time.sleep(.6)
+        racine = dump_ui()
+        if a.jusqu_a and racine is not None and noeuds(racine, a.jusqu_a):
+            print(f"trouve apres {i + 1} defilement(s) : {a.jusqu_a}")
+            return
+        try:
+            courante = open(UI_XML, "rb").read()
+        except OSError:
+            courante = None
+        if courante is not None and courante == empreinte:
+            sortir(f"l'ecran n'a pas bouge au defilement {i + 1} : "
+                   f"la liste est en butee, ou le geste tombe hors zone.\n"
+                   f"Lire l'ecran :  pixel ui")
+        empreinte = courante
+
+    if a.jusqu_a:
+        sortir(f"pas trouve apres {a.max} defilements : {a.jusqu_a}")
+    print(f"{a.max} defilement(s) vers le {a.sens}")
+
+def c_shot(a):
+    dest = a.fichier or os.path.join(tempfile.gettempdir(),
+                                     time.strftime("pixel-%H%M%S.png"))
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    r = brut(["-s", PHONE, "exec-out", "screencap", "-p"], timeout=40, texte=False)
+    if not r.stdout or not r.stdout.startswith(b"\x89PNG"):
+        sortir("capture ratee (ecran protege FLAG_SECURE ?)")
+    open(dest, "wb").write(r.stdout)
+    print(dest)
+
+
+def c_video(a):
+    """Enregistre l'ecran quelques secondes et rapatrie le fichier."""
+    dest = a.fichier or os.path.join(tempfile.gettempdir(),
+                                     time.strftime("pixel-%H%M%S.mp4"))
+    sh(f"screenrecord --time-limit {a.secondes} /sdcard/rec.mp4",
+       timeout=a.secondes + 30)
+    brut(["-s", PHONE, "pull", "/sdcard/rec.mp4", dest], timeout=60)
+    sh("rm -f /sdcard/rec.mp4")
+    print(dest)
+
+
+def c_apps(a):
+    flag = "-3" if not a.toutes else ""
+    paquets = sorted(l.split(":", 1)[1] for l in sh(f"pm list packages {flag}")
+                     .splitlines() if ":" in l)
+    if a.filtre:
+        paquets = [p for p in paquets if a.filtre.lower() in p.lower()]
+    print("\n".join(paquets))
+
+
+def c_open(a):
+    if "://" in a.cible or a.cible.startswith("http"):
+        sh(f"am start -a android.intent.action.VIEW -d '{a.cible}'")
+        print("ouvert : " + a.cible)
+        return
+    sh(f"monkey -p {a.cible} -c android.intent.category.LAUNCHER 1")
+    print("lance : " + a.cible)
+
+
+def c_stop(a):
+    sh(f"am force-stop {a.paquet}")
+    print("arrete : " + a.paquet)
+
+
+def c_install(a):
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    r = brut(["-s", PHONE, "install", "-r", a.apk], timeout=300)
+    print((r.stdout + r.stderr).strip())
+
+
+def c_desinstalle(a):
+    print(sh(f"pm uninstall --user 0 {a.paquet}").strip())
+
+
+def c_notifs(a):
+    """Liste les notifications visibles."""
+    d = sh("dumpsys notification --noredact")
+    blocs = re.split(r"\n\s{4}NotificationRecord", d)
+    vus = []
+    for b in blocs[1:]:
+        pkg = re.search(r"pkg=(\S+)", b)
+        titre = re.search(r"android\.title=\S*\s*(.*)", b)
+        texte = re.search(r"android\.text=\S*\s*(.*)", b)
+        if not pkg:
+            continue
+        e = (pkg.group(1).split("/")[0],
+             (titre.group(1).strip() if titre else ""),
+             (texte.group(1).strip() if texte else ""))
+        if e not in vus:
+            vus.append(e)
+    if a.json:
+        print(json.dumps([{"paquet": p, "titre": t, "texte": x}
+                          for p, t, x in vus], ensure_ascii=False, indent=2))
+        return
+    for p, t, x in vus:
+        print(f"{p:38} {t} | {x}"[:200])
+
+
+def c_presse_papier(a):
+    if a.texte:
+        sh("cmd clipboard set-text '%s'" % " ".join(a.texte).replace("'", "'\\''"))
+        print("presse-papier ecrit")
+    else:
+        print(sh("cmd clipboard get-text").strip())
+
+
+def c_sms(a):
+    """Derniers SMS recus/envoyes."""
+    out = sh(f"content query --uri content://sms --projection "
+             f"address:date:type:body --sort 'date DESC' ")
+    lignes = [l for l in out.splitlines() if l.startswith("Row:")][:a.nombre]
+    for l in lignes:
+        d = dict(re.findall(r"(\w+)=([^,]*)(?:, |$)", l.split("Row: ")[1].split(" ", 1)[1]))
+        ts = d.get("date", "0")
+        quand = time.strftime("%d/%m %H:%M", time.localtime(int(ts) / 1000)) if ts.isdigit() else "?"
+        sens = "recu" if d.get("type") == "1" else "envoye"
+        print(f"{quand} {sens:7} {d.get('address','?'):16} {d.get('body','')}"[:200])
+
+
+def c_envoie_sms(a):
+    corps = " ".join(a.texte)
+    sh(f"am start -a android.intent.action.SENDTO -d sms:{a.numero} "
+       f"--es sms_body '{corps}' --ez exit_on_sent true")
+    time.sleep(2)
+    r = stabiliser()
+    for cible in ("Envoyer", "Send", "envoyer"):
+        els = noeuds(r, cible, True)
+        if els:
+            sh(f"input tap {els[0]['x']} {els[0]['y']}")
+            print(f"SMS envoye a {a.numero}")
+            return
+    print("Message pret dans l'appli SMS, bouton Envoyer non trouve. "
+          "Utiliser : pixel ui")
+
+
+def c_appelle(a):
+    sh(f"am start -a android.intent.action.CALL -d tel:{a.numero}")
+    print("appel : " + a.numero)
+
+
+def c_raccroche(a):
+    sh("input keyevent 6")
+    print("raccroche")
+
+
+def c_contacts(a):
+    out = sh("content query --uri content://contacts/phones "
+             "--projection display_name:number")
+    lignes = [l for l in out.splitlines() if l.startswith("Row:")]
+    for l in lignes:
+        if a.filtre and a.filtre.lower() not in l.lower():
+            continue
+        print(l.split("Row: ")[1].split(" ", 1)[1])
+
+
+def c_reglage(a):
+    """wifi, bluetooth, avion, volume, luminosite, rotation."""
+    v = a.valeur
+    q = a.quoi
+    if q == "wifi":
+        sh(f"svc wifi {'enable' if v in ('on', '1') else 'disable'}")
+    elif q == "bluetooth":
+        sh(f"svc bluetooth {'enable' if v in ('on', '1') else 'disable'}")
+    elif q == "donnees":
+        sh(f"svc data {'enable' if v in ('on', '1') else 'disable'}")
+    elif q == "avion":
+        etat = "true" if v in ("on", "1") else "false"
+        sh(f"cmd connectivity airplane-mode {etat}")
+    elif q == "luminosite":
+        sh(f"settings put system screen_brightness {int(int(v) * 255 / 100)}")
+    elif q == "volume":
+        sh(f"media volume --stream 3 --set {v}")
+    elif q == "rotation":
+        sh("settings put system accelerometer_rotation 0")
+        sh(f"settings put system user_rotation {v}")
+    else:
+        sortir("reglage inconnu : " + q)
+    print(f"{q} -> {v}")
+
+
+def c_reveille(a):
+    if "mScreenOn=true" not in sh("dumpsys power | grep -m1 mScreenOn") and \
+       "Awake" not in sh("dumpsys power | grep -m1 mWakefulness"):
+        sh("input keyevent 224")
+    else:
+        sh("input keyevent 224")
+    print("ecran allume")
+
+
+def c_dort(a):
+    sh("input keyevent 223")
+    print("ecran eteint")
+
+
+def c_deverrouille(a):
+    pin = a.pin or os.environ.get("PIXEL_PIN")
+    sh("input keyevent 224")
+    time.sleep(1)
+    larg, haut = taille_ecran()
+    sh(f"input swipe {larg//2} {int(haut*.8)} {larg//2} {int(haut*.2)} 200")
+    time.sleep(1)
+    if pin:
+        sh(f"input text {pin}")
+        sh("input keyevent 66")
+    time.sleep(1.5)
+    print("deverrouille" if pin else "reveille (pas de PIN fourni, voir PIXEL_PIN)")
+
+
+def prive_deverrouille():
+    """Flags sans QUIET_MODE = espace privé ouvert. dumpsys user dit vrai,
+    am get-started-user-state ment."""
+    d = sh("dumpsys user | grep -A3 'UserInfo{10'")
+    m = re.search(r"Flags:\s*(\d+)", d)
+    if not m:
+        return None
+    return "QUIET_MODE" not in d
+
+
+def c_prive(a):
+    """Ouvre l'espace privé sans jamais rejouer un geste qui n'a rien changé."""
+    etat = prive_deverrouille()
+    if etat is None:
+        sortir("aucun espace privé sur ce téléphone")
+    if etat and not a.force:
+        print("déjà ouvert (Flags sans QUIET_MODE), rien à faire")
+    else:
+        code = a.code or os.environ.get("PIXEL_PRIVE_PIN")
+        if not code:
+            sortir("code manquant : pixel prive --code 0000")
+        sh("input keyevent 3"); time.sleep(.8)          # accueil
+        sh("input keyevent 3"); time.sleep(.8)          # back depuis le tiroir remonte l'app, home non
+        larg, haut = taille_ecran()
+        sh(f"input swipe {larg//2} {int(haut*.85)} {larg//2} {int(haut*.30)} 250")
+        time.sleep(1.5)
+        # le clavier du tiroir est déjà ouvert : chercher, ne pas défiler
+        saisir("es"); time.sleep(1.5)
+        r = stabiliser(4)
+        els = [e for e in noeuds(r, "espace priv") if "stockage" not in e["texte"].lower()]
+        if not els:
+            sortir("tuile « Espace privé » absente après recherche. Lire : pixel ui")
+        sh(f"input tap {els[0]['x']} {els[0]['y']}"); time.sleep(2.5)
+        sh(f"input text '{code}'"); time.sleep(.5)
+        sh("input keyevent 66")                          # le PIN ne se valide pas seul
+        time.sleep(2.5)
+        if not prive_deverrouille():
+            sortir("code refusé ou écran inattendu. Capture : pixel shot")
+        print("espace privé ouvert")
+
+    if a.lance:
+        cible = sh(f"cmd package resolve-activity --brief --user 10 {a.lance}"
+                   ).strip().splitlines()
+        cible = [l for l in cible if "/" in l]
+        if not cible:
+            sortir(f"{a.lance} introuvable dans l'espace privé")
+        sh(f"am start --user 10 -n {cible[-1].strip()}")
+        time.sleep(2)
+        focus = sh("dumpsys window | grep -m1 mCurrentFocus").strip()
+        print(focus)
+        if "u10" not in focus:
+            sortir("l'app n'est pas au premier plan dans l'espace privé")
+
+
+def c_push(a):
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    r = brut(["-s", PHONE, "push", a.source, a.dest], timeout=300)
+    print((r.stdout + r.stderr).strip())
+
+
+def c_pull(a):
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    r = brut(["-s", PHONE, "pull", a.source, a.dest], timeout=300)
+    print((r.stdout + r.stderr).strip())
+
+
+def c_ls(a):
+    print(sh(f"ls -la '{a.chemin}'").strip())
+
+
+def c_shell(a):
+    print(sh(" ".join(a.commande), timeout=120).rstrip())
+
+
+def c_clavier_install(a):
+    """Installe ADBKeyboard, indispensable pour taper des accents ou du thai."""
+    url = ("https://github.com/senzhk/ADBKeyBoard/raw/master/ADBKeyboard.apk")
+    dest = "/tmp/ADBKeyboard.apk"
+    if not os.path.exists(dest):
+        r = subprocess.run(["curl", "-fsSL", "-o", dest, url], capture_output=True)
+        if r.returncode != 0 or not os.path.exists(dest):
+            sortir("telechargement d'ADBKeyboard impossible")
+    global PHONE
+    if PHONE is None:
+        PHONE = resoudre()
+    print(brut(["-s", PHONE, "install", "-r", dest], timeout=180).stdout.strip())
+    sh("ime enable com.android.adbkeyboard/.AdbIME")
+    print("ADBKeyboard installe. Les accents et le thai passent maintenant.")
+
+
+def c_clavier_normal(a):
+    sh("ime reset")
+    print("clavier d'origine retabli")
+
+
+def c_garde(a):
+    ici = os.path.dirname(os.path.abspath(__file__))
+    exe = os.path.join(ici, "pixel-garde")
+    if a.arret:
+        subprocess.run([exe, "--arret"])
+        return
+    if a.etat:
+        if garde_tourne():
+            d = depuis_toucher()
+            print(f"garde actif (pid {open(G_PID).read().strip()})")
+            print(f"dernier contact humain : il y a {d:.1f} s"
+                  if d < 1e8 else "aucun contact humain enregistre")
+        else:
+            print("garde arrete : les actions ne s'effacent PAS devant l'humain")
+        print("arret d'urgence : " + ("ARME" if os.path.exists(G_STOP) else "leve"))
+        return
+    if garde_tourne():
+        print("garde deja actif")
+        return
+    with open("/tmp/pixel-garde.log", "a") as jrn:
+        subprocess.Popen([exe], stdout=jrn, stderr=jrn,
+                         start_new_session=True)
+    time.sleep(2)
+    print("garde demarre" if garde_tourne() else "le garde n'a pas demarre, "
+          "voir /tmp/pixel-garde.log")
+
+
+def _surfaces_etat():
+    """Repousse l'etat courant sur la pastille du telephone.
+
+    PIEGE : poser /tmp/pixel-stop ne suffit pas. Le fichier vit sur hote-1, le
+    telephone ne le lit jamais. Sans ce broadcast la pastille reste verte alors
+    que le pilotage est suspendu, et USER croit que l'agent a toujours la main.
+    Tout code qui cree ou retire G_STOP doit appeler ceci.
+    """
+    # La notification permanente a ete retiree le 2026-08-24 : la pastille dit
+    # deja l'etat par sa couleur et porte le bouton ARRETER. Deux surfaces pour
+    # la meme information, c'est une de trop. Les notifications de l'appli sont
+    # bloquees cote telephone (appops POST_NOTIFICATION ignore), ce qui tue
+    # aussi l'avertissement systeme "s'affiche par-dessus les autres apps".
+    _poser_bulle()
+
+
+G_FORME = "/tmp/pixel-forme"
+# Present = USER a masque la pastille lui-meme. Le garde surveille sa presence
+# toutes les 20 s et la repose si elle a disparu : sans ce marqueur, il ne
+# distinguerait pas un masquage voulu d'un processus tue par Android.
+G_CACHEE = "/tmp/pixel-bulle-off"
+
+
+def _poser_bulle(forme=None):
+    """Envoie la pastille : etat courant plus le menu lu sur le disque."""
+    global PRIV
+    PRIV = True
+    try:
+        return _poser_bulle_reel(forme)
+    finally:
+        PRIV = False
+
+
+def _poser_bulle_reel(forme=None):
+    ici = os.path.dirname(os.path.realpath(__file__))
+    fichier = os.path.join(ici, "actions", "menu.txt")
+    # Le bouton d'etat vient de actions/etat.txt, comme pour le garde. Les
+    # deux en avaient une copie : elles ont diverge, et la pastille montrait
+    # "ARRETER" alors que le garde parlait deja un autre langage.
+    etats = [l.strip() for l in open(os.path.join(ici, "actions", "etat.txt"),
+                                     encoding="utf-8")
+             if l.strip() and not l.startswith("#") and ":" in l]
+    tete = (etats[1] if len(etats) > 1 else "go:Reprendre") if os.path.exists(G_STOP) \
+        else (etats[0] if etats else "stop:Mettre en pause")
+    lignes = [l.strip() for l in open(fichier, encoding="utf-8")]
+    utiles = []
+    for l in lignes:
+        if not l or l.startswith("#") or ":" not in l:
+            continue
+        if l.split(":", 1)[0] == "rec" and os.path.exists("/tmp/pixel-rec"):
+            l = "recstop:Arreter l\u2019enregistrement"
+        utiles.append(l)
+    # `tete` n'entre plus dans le menu depuis le 26/08/2026 : le bouton d'etat
+    # est passe sur l'appui long de la pastille. Il est toujours CALCULE, parce
+    # que les deux libelles partent dans l'extra `tetes`, dont l'appli se sert
+    # pour savoir quel id declencher sous le doigt.
+    menu = "|".join(utiles)
+    # L'apostrophe casserait la commande : le menu part dans un `adb shell` ou
+    # il est entoure de guillemets simples.
+    menu = menu.replace("'", "\u2019")
+    # "actif" n'existe plus cote pastille : elle connait veille, attente,
+    # pilote et suspendu. Un `pixel go` la rend au repos, pas au vert.
+    if os.path.exists(G_STOP):
+        etat = "suspendu"
+    elif os.path.exists("/tmp/pixel-rec"):
+        etat = "capture"
+    elif os.path.exists("/tmp/pixel-voix"):
+        etat = "voix"
+    else:
+        etat = "veille"
+    # La forme est memorisee cote telephone : on ne la renvoie que si elle
+    # change, sinon un simple repost la remettrait a "auto".
+    if forme is None and os.path.exists(G_FORME):
+        forme = open(G_FORME).read().strip()
+    if os.path.exists(G_CACHEE):
+        os.remove(G_CACHEE)
+    # Les DEUX libelles partent ensemble : l'appli retourne son bouton toute
+    # seule au moment de l'appui, sans attendre notre reponse.
+    deux = "|".join([etats[0] if etats else "stop:Mettre en pause",
+                     etats[1] if len(etats) > 1 else "go:Reprendre"])
+    sh("am broadcast -n com.poste.pixelgarde/.Recepteur -a com.poste.pixel.BULLE "
+       "--es etat {} --es menu '{}' --es tetes '{}'{}".format(
+           etat, menu, deux.replace("'", "\u2019"),
+           " --es forme " + forme if forme else ""))
+    return menu
+
+
+def qui_a_arme():
+    """USER, ou l'agent ? Un arret pose par USER ne se leve pas tout seul."""
+    try:
+        return open(G_STOP).read().strip().split()[0] or "inconnu"
+    except (OSError, IndexError):
+        return "inconnu"
+
+
+def c_pause(a):
+    with open(G_STOP, "w") as f:
+        f.write(getattr(a, "par", None) or "agent")
+    _surfaces_etat()
+    print("pilotage suspendu, pastille orange. Reprise : pixel go")
+
+
+def c_go(a):
+    # 25/08/2026 : USER a constate qu'un autre agent avait pilote le telephone
+    # alors qu'il l'avait mis en pause. Le refus vit maintenant dans le binaire
+    # adb ; ici on ferme la derniere porte, celle de l'agent qui leverait
+    # poliment le verrou de USER pour "pouvoir travailler".
+    if os.path.exists(G_STOP):
+        par = qui_a_arme()
+        # Par defaut on suppose que c'est USER : un temoin non signe (ancien
+        # format, fichier pose a la main) doit bloquer, pas ouvrir.
+        if par != "agent" and not getattr(a, "vj_a_dit", False):
+            sortir("cet arret a ete arme par USER lui-meme (" + par + ").\n"
+                   "Il le leve par la pastille, ou il te le demande en clair.\n"
+                   "Si c'est le cas : pixel go --poste-a-dit")
+        os.remove(G_STOP)
+    _surfaces_etat()
+    print("pilotage repris, pastille rendue au repos (gris).")
+
+
+def c_bulle(a):
+    """La pastille flottante : poser, cacher, ou lister ses boutons.
+
+    Le menu vit dans actions/menu.txt et n'est PAS code dans l'appli : la
+    pastille se contente d'afficher ce qu'on lui envoie, et de retracer l'id
+    du bouton presse. Le garde lit cette trace et lance actions/<id>.sh.
+    """
+    # realpath, pas abspath : ~/bin/pixel est un lien vers contexte/bin/pixel,
+    # et c'est la que vivent les actions.
+    ici = os.path.dirname(os.path.realpath(__file__))
+    actions = os.path.join(ici, "actions")
+    if a.action == "menu":
+        for ligne in open(os.path.join(actions, "menu.txt"), encoding="utf-8"):
+            ligne = ligne.strip()
+            if ligne and not ligne.startswith("#"):
+                ident = ligne.split(":", 1)[0]
+                script = os.path.join(actions, ident + ".sh")
+                ou = script if os.path.exists(script) else "traite par l'appli"
+                print("{:<10} {}".format(ligne, ou))
+        return
+    if a.action in ("auto", "rond", "barre"):
+        open(G_FORME, "w").write(a.action)
+        _poser_bulle(a.action)
+        print({"auto": "auto : trait de bord au repos, rond quand j'agis.",
+               "rond": "rond en permanence.",
+               "barre": "trait de bord en permanence."}[a.action])
+        return
+    if a.action == "restaurer":
+        # Emprunte le chemin exact du redemarrage : l'appli relit son propre
+        # menu enregistre et se repose seule, sans que hote-1 lui dicte quoi que
+        # ce soit. C'est le seul moyen de tester ce chemin sans rebooter.
+        sh("am broadcast -a com.poste.pixel.RESTAURER "
+           "-n com.poste.pixelgarde/.Demarrage --include-stopped-packages")
+        print("restauration demandee (chemin du redemarrage).")
+        return
+    if a.action == "cacher":
+        open(G_CACHEE, "w").close()
+        # poignee 1 : un cil reste contre le bord. Un masquage sans retour
+        # possible depuis le telephone est un piege, meme pose depuis hote-1.
+        sh("am broadcast -n com.poste.pixelgarde/.Recepteur -a com.poste.pixel.CACHER"
+           " --es poignee 1")
+        print("pastille masquee. Un cil reste au bord : un appui la ramene.")
+        return
+    print("pastille posee : " + _poser_bulle())
+
+
+# ---------------------------------------------------------------- arguments
+
+def main():
+    p = argparse.ArgumentParser(
+        prog="pixel", description="Pilotage complet du Pixel 9 Pro XL.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""exemples :
+  pixel etat                        que fait le telephone en ce moment
+  pixel ui                          tout ce qui est lisible a l'ecran
+  pixel click "Envoyer"             cliquer sur un element par son texte
+  pixel saisir "bonjour ca va"      taper du texte
+  pixel notifs                      les notifications en cours
+  pixel sms -n 5                    les 5 derniers SMS
+  pixel open com.spotify.music      lancer une appli
+  pixel open https://exemple.fr     ouvrir un lien
+  pixel reglage wifi on             allumer le WiFi
+  pixel scroll --jusqu-a "Reglages" faire defiler jusqu'a voir un texte
+""")
+    s = p.add_subparsers(dest="cmd", required=True)
+
+    def add(nom, fn, aide, *a):
+        sp = s.add_parser(nom, help=aide)
+        sp.set_defaults(fn=fn)
+        return sp
+
+    add("etat", c_etat, "app au premier plan, batterie, ecran")
+
+    sp = add("ui", c_ui, "elements lisibles a l'ecran")
+    sp.add_argument("--cliquables", action="store_true")
+    sp.add_argument("--json", action="store_true")
+
+    sp = add("find", c_find, "coordonnees d'un element, sans cliquer")
+    sp.add_argument("texte", nargs="+")
+
+    sp = add("click", c_click, "cliquer sur un element par son texte")
+    sp.add_argument("texte", nargs="+")
+
+    sp = add("tap", lambda a: (sh(f"input tap {a.x} {a.y}"),
+                               print(f"tap [{a.x},{a.y}]")), "cliquer a des coordonnees")
+    sp.add_argument("x", type=int); sp.add_argument("y", type=int)
+
+    sp = add("swipe", lambda a: (sh(f"input swipe {a.x1} {a.y1} {a.x2} {a.y2} {a.ms}"),
+                                 print("swipe")), "glisser")
+    for n in ("x1", "y1", "x2", "y2"):
+        sp.add_argument(n, type=int)
+    sp.add_argument("ms", type=int, nargs="?", default=300)
+
+    sp = add("scroll", c_scroll, "faire defiler, eventuellement jusqu'a un texte")
+    sp.add_argument("sens", nargs="?", default="bas", choices=["bas", "haut"])
+    sp.add_argument("--jusqu-a", dest="jusqu_a", default="")
+    sp.add_argument("--max", type=int, default=10)
+    sp.add_argument("--force", action="store_true",
+                    help="defiler meme si un champ de recherche est actif")
+
+    sp = add("attendre", c_attendre, "attendre qu'un texte apparaisse")
+    sp.add_argument("texte", nargs="+")
+    sp.add_argument("-s", "--secondes", type=int, default=15)
+
+    sp = add("saisir", lambda a: print(saisir(" ".join(a.texte))), "taper du texte")
+    sp.add_argument("texte", nargs="+")
+
+    sp = add("touche", lambda a: (sh(f"input keyevent {TOUCHES.get(a.nom, a.nom)}"),
+                                  print("touche " + a.nom)),
+             "back, home, entree, recents, power, volup, voldown...")
+    sp.add_argument("nom")
+
+    sp = add("shot", c_shot, "capture d'ecran vers le PC")
+    sp.add_argument("fichier", nargs="?")
+
+    sp = add("video", c_video, "enregistrer l'ecran")
+    sp.add_argument("-s", "--secondes", type=int, default=15)
+    sp.add_argument("fichier", nargs="?")
+
+    sp = add("apps", c_apps, "applications installees")
+    sp.add_argument("filtre", nargs="?")
+    sp.add_argument("--toutes", action="store_true", help="inclut les apps systeme")
+
+    sp = add("open", c_open, "lancer une appli (paquet) ou ouvrir un lien (URL)")
+    sp.add_argument("cible")
+
+    sp = add("stop", c_stop, "forcer l'arret d'une appli")
+    sp.add_argument("paquet")
+
+    sp = add("install", c_install, "installer un APK")
+    sp.add_argument("apk")
+
+    sp = add("desinstalle", c_desinstalle, "desinstaller une appli")
+    sp.add_argument("paquet")
+
+    sp = add("notifs", c_notifs, "notifications en cours")
+    sp.add_argument("--json", action="store_true")
+
+    sp = add("presse-papier", c_presse_papier, "lire ou ecrire le presse-papier")
+    sp.add_argument("texte", nargs="*")
+
+    sp = add("sms", c_sms, "derniers SMS")
+    sp.add_argument("-n", "--nombre", type=int, default=10)
+
+    sp = add("envoie-sms", c_envoie_sms, "envoyer un SMS")
+    sp.add_argument("numero"); sp.add_argument("texte", nargs="+")
+
+    sp = add("appelle", c_appelle, "passer un appel")
+    sp.add_argument("numero")
+
+    add("raccroche", c_raccroche, "raccrocher")
+
+    sp = add("contacts", c_contacts, "carnet d'adresses")
+    sp.add_argument("filtre", nargs="?")
+
+    sp = add("reglage", c_reglage, "wifi|bluetooth|donnees|avion|volume|luminosite|rotation")
+    sp.add_argument("quoi"); sp.add_argument("valeur")
+
+    add("reveille", c_reveille, "allumer l'ecran")
+    add("dort", c_dort, "eteindre l'ecran")
+
+    sp = add("deverrouille", c_deverrouille, "reveiller et saisir le code PIN")
+    sp.add_argument("pin", nargs="?")
+
+    sp = add("prive", c_prive, "ouvrir l'espace prive (verifie avant d'agir)")
+    sp.add_argument("--code", help="PIN de l'espace prive")
+    sp.add_argument("--lance", help="paquet a lancer dedans, ex com.instagram.android")
+    sp.add_argument("--force", action="store_true", help="rejouer meme si deja ouvert")
+
+    sp = add("push", c_push, "envoyer un fichier vers le telephone")
+    sp.add_argument("source"); sp.add_argument("dest", nargs="?", default="/sdcard/Download/")
+
+    sp = add("pull", c_pull, "rapatrier un fichier du telephone")
+    sp.add_argument("source"); sp.add_argument("dest", nargs="?", default=".")
+
+    sp = add("ls", c_ls, "lister un dossier du telephone")
+    sp.add_argument("chemin", nargs="?", default="/sdcard/")
+
+    sp = add("shell", c_shell, "commande brute sur le telephone")
+    sp.add_argument("commande", nargs="+")
+
+    sp = add("garde", c_garde, "ecouter le doigt de l'humain et lui donner un stop")
+    sp.add_argument("--arret", action="store_true")
+    sp.add_argument("--etat", action="store_true")
+
+    sp = add("pause", c_pause, "suspendre tout pilotage (equivaut a Volume Bas x3)")
+    sp.add_argument("--par", default="agent",
+                    help="qui arme : poste | pastille | volume | agent")
+    sp = add("go", c_go, "lever la suspension et reprendre la main")
+    sp.add_argument("--poste-a-dit", action="store_true",
+                    help="USER a explicitement demande la reprise")
+
+    sp = add("bulle", c_bulle, "pastille flottante : poser, cacher, forme, menu")
+    sp.add_argument("action", nargs="?", default="poser",
+                    choices=["poser", "cacher", "menu", "auto", "rond", "barre",
+                             "restaurer"])
+
+    add("clavier-install", c_clavier_install, "installer ADBKeyboard (accents, thai)")
+    add("clavier-normal", c_clavier_normal, "retablir le clavier d'origine")
+
+    a = p.parse_args()
+    mutante = a.cmd in MUTANTES
+    try:
+        if mutante:
+            # Dans le try : un abandon (arret d'urgence, attente trop longue)
+            # doit lui aussi rendre la pastille au repos, jamais la laisser
+            # ambre pour l'eternite.
+            attendre_calme()
+            poser_etat("pilote")
+        a.fn(a)
+    except subprocess.TimeoutExpired:
+        sortir("le telephone ne repond plus (delai depasse)")
+    except KeyboardInterrupt:
+        sys.exit(130)
+    finally:
+        if mutante:
+            poser_etat("veille")
+
+
+if __name__ == "__main__":
+    main()

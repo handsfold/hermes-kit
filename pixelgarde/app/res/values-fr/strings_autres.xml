@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pilotage agent</string>
+    <string name="missions_label">Accueil</string>
+    <string name="reveil_label">Creeper</string>
+
+    <string name="panneau_termine">Terminé</string>
+    <string name="panneau_ajouter">Ajouter</string>
+    <string name="panneau_ajouter_app">‹  Ajouter une app</string>
+    <string name="panneau_chercher">Chercher une app</string>
+    <string name="panneau_aucune">Aucune app</string>
+
+    <string name="missions_sans_relais">Relais non configuré : l\'Accueil passe par lui.</string>
+
+    <string name="avis_canal">Rapports du QG</string>
+    <string name="avis_canal_desc">Un rapport attend d\'être lu à voix haute</string>
+    <string name="avis_defaut">Rapport en attente</string>
+    <string name="avis_lire">Lire</string>
+    <string name="avis_lire_rapport">Lire le rapport</string>
+
+    <string name="recepteur_canal">Pilotage agent</string>
+    <string name="recepteur_canal_desc">Bouton d\'arrêt du pilotage à distance</string>
+    <string name="recepteur_titre_pause">Pilotage SUSPENDU</string>
+    <string name="recepteur_titre_actif">Pilotage agent actif</string>
+    <string name="recepteur_texte_pause">L\'agent ne touche plus à rien.</string>
+    <string name="recepteur_texte_actif">Il peut agir sur le téléphone.</string>
+    <string name="recepteur_reprendre">REPRENDRE</string>
+    <string name="recepteur_arreter">ARRÊTER</string>
+
+    <string name="lecteur_titre">Lecture</string>
+    <string name="lecteur_rien">%1$s : rien à lire.</string>
+    <string name="lecteur_arreter">Arrêter</string>
+    <string name="lecteur_precedent">Précédent</string>
+    <string name="lecteur_pause">Pause</string>
+    <string name="lecteur_lire">Lire</string>
+    <string name="lecteur_suivant">Suivant</string>
+    <string name="lecteur_canal">Lecture à voix haute</string>
+</resources>

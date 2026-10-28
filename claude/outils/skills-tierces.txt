@@ -1,0 +1,13 @@
+# Skills tierces sans manifeste (lues par parc_skills.py). Une par ligne.
+create-rule              # livrees avec Cursor, dans ~/.agents/skills
+create-skill
+create-subagent
+migrate-to-skills
+update-cursor-settings
+source-command-switch-model
+owasp-security           # paquet copie le 2026-03-26
+presentation-structure   # paquet presentation, 2026-05-13
+presentation-styling
+vibe-to-agentic-framework
+agent-browser            # paquet vercel-labs, corps non retouche
+agent-reach              # paquet Panniantong/Agent-Reach (description adaptee par USER, corps tiers)

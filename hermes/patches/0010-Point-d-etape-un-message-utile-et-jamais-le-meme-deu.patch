@@ -1,0 +1,133 @@
+From 265016f8a076996f5826c4ddda8fcd7c1d6a067a Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Point d'etape : un message utile et jamais le meme deux fois
+ pendant un tour long
+
+Reecrit le 2026-09-03 (retro mensuelle). L'ancienne version renvoyait le meme
+texte, en anglais, toutes les 3 min ; USER l'avait coupee et se retrouvait sans
+visibilite. Signature de ce qui a bouge : si rien de neuf, on se tait ; si
+l'agent est fige, un compteur avance. Test d'ownership du heartbeat adapte.
+
+Retouche: R11
+---
+ gateway/run_turn.py                    | 62 ++++++++++++++++++++------
+ tests/gateway/test_busy_session_ack.py | 12 ++++-
+ 2 files changed, 59 insertions(+), 15 deletions(-)
+
+diff --git a/gateway/run_turn.py b/gateway/run_turn.py
+index 8fdedc04e8..6185359263 100644
+--- a/gateway/run_turn.py
++++ b/gateway/run_turn.py
+@@ -3923,6 +3923,49 @@ class GatewayTurnMixin:
+         if not _notify_adapter:
+             return
+         _heartbeat_msg_id: Optional[str] = None
++
++        def _point_etape(_agent_ref, _elapsed_mins, _avec_iteration):
++            """Rend (texte, signature) du point d'etape. Signature = ce qui a bouge.
++
++            Reecrit le 2026-09-03 (retro mensuelle). L'ancienne version renvoyait
++            le meme texte a l'identique toutes les 3 min, en anglais. USER l'avait
++            donc coupee (gateway_notify_interval: 0) et se retrouvait sans aucune
++            visibilite : 71 relances "ca en est ou ?" sur 30 jours. Regle : on
++            n'envoie jamais deux fois le meme contenu. Si rien n'a bouge, on se
++            tait ; si l'agent est fige, on le dit avec un compteur qui avance,
++            donc un message different a chaque fois.
++            """
++            _sig, _detail = [], ""
++            _a = self._agent_activity_summary(_agent_ref)
++            with suppress(Exception):
++                if _a:
++                    _quoi = str(_a.get("current_tool") or _a.get("last_activity_desc") or "").strip()
++                    # Le jargon interne du streaming n'apprend rien a USER et change
++                    # a chaque sonde ("0s, no chunks yet"), ce qui relancait un
++                    # message a chaque fois. On le replie sur un libelle stable.
++                    _bas = _quoi.lower()
++                    if "stream response" in _bas or "no chunks yet" in _bas:
++                        _quoi = "le modele reflechit"
++                    elif _bas.startswith("waiting for"):
++                        _quoi = "en attente du modele"
++                    _quoi = _quoi[:60]
++                    _iter = _a.get("api_call_count")
++                    _fige = int(_a.get("seconds_since_activity") or 0)
++                    _bouts = []
++                    if _quoi:
++                        _bouts.append("en cours : %s" % _quoi)
++                        _sig.append(_quoi)
++                    if _iter is not None and _avec_iteration:
++                        _bouts.append("etape %s/%s" % (_iter, _a.get("max_iterations")))
++                        _sig.append(str(_iter))
++                    if _fige >= 300:
++                        _bouts.append("rien ne bouge depuis %d min" % (_fige // 60))
++                        _sig.append("fige%d" % (_fige // 300))
++                    if _bouts:
++                        _detail = " (" + ", ".join(_bouts) + ")"
++            return ("⏳ Toujours dessus, %d min%s" % (_elapsed_mins, _detail), "|".join(_sig))
++
++        _deja_vu = None
+         while True:
+             await asyncio.sleep(_NOTIFY_INTERVAL)
+             if not self._should_emit_long_running_notification(
+@@ -3930,26 +3973,17 @@ class GatewayTurnMixin:
+             ):
+                 break
+             _elapsed_mins = int((time.time() - _notify_start) // 60)
+-            # Terse heartbeat by default; the iteration counter is gated on busy_ack_detail.
+-            _status_detail = ""
+             _want_iteration_detail = bool(
+                 disp.resolve_display_setting(disp.user_config, disp.platform_key, "busy_ack_detail", True)
+             )
+-            _a = self._agent_activity_summary(agent_holder[0])
+-            with suppress(Exception):
+-                if _a:
+-                    _parts = []
+-                    if _want_iteration_detail:
+-                        _parts.append(format_iteration_progress(_a["api_call_count"], _a["max_iterations"]))
+-                    _action = _a.get("current_tool") or _a.get("last_activity_desc")
+-                    if _action:
+-                        _parts.append(str(_action))
+-                    if _parts:
+-                        _status_detail = " — " + ", ".join(_parts)
++            _texte, _sig = _point_etape(agent_holder[0], _elapsed_mins, _want_iteration_detail)
++            if _sig == _deja_vu:
++                continue  # rien de neuf depuis le dernier point : on se tait
++            _deja_vu = _sig
+             _heartbeat_text = (
+                 disp._generic_status_phrase("status")
+                 if _long_running_mode == "generic"
+-                else f"⏳ Working — {_elapsed_mins} min{_status_detail}"
++                else _texte
+             )
+             try:
+                 _notify_res = None
+diff --git a/tests/gateway/test_busy_session_ack.py b/tests/gateway/test_busy_session_ack.py
+index f1562fa4ae..4fc21d8b90 100644
+--- a/tests/gateway/test_busy_session_ack.py
++++ b/tests/gateway/test_busy_session_ack.py
+@@ -523,6 +523,7 @@ class TestLongRunningNotificationOwnership:
+         """The guard is rechecked after the awaited edit: a restart that begins while the edit is
+         in flight must not be followed by a fresh "Working" send when that edit fails (#10990)."""
+         import asyncio
++        import itertools
+         from types import SimpleNamespace
+         from gateway.run import GatewayRunner
+         from gateway.turn_context import TurnContext
+@@ -541,7 +542,16 @@ class TestLongRunningNotificationOwnership:
+ 
+         adapter.edit_message = AsyncMock(side_effect=_edit_then_restart)
+         runner._adapter_for_source = lambda source: adapter
+-        runner._agent_activity_summary = staticmethod(lambda agent: None)
++        # Divergence locale : le point d'etape se tait quand rien n'a bouge
++        # depuis le tick precedent. Le compteur ci-dessous fait varier
++        # l'activite a chaque sonde, pour que le scenario du ticket reste
++        # celui teste : un edit part bien, et c'est son echec qui compte.
++        _sondes = itertools.count()
++        runner._agent_activity_summary = staticmethod(
++            lambda agent: {"current_tool": "outil-%d" % next(_sondes),
++                           "api_call_count": 1, "max_iterations": 9,
++                           "seconds_since_activity": 0}
++        )
+         agent = MagicMock()
+         runner._running_agents["sess"] = agent
+         disp = MagicMock()

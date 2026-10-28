@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.poste.pixelgarde"
+    android:versionCode="49" android:versionName="2.35">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Le relais reseau (Relais.java, 2026-10-03) : la bulle sans ADB. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- Confirme un appui sur la pastille sans attendre hote-1 : le pouce cache
+       la couleur, pas la vibration. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!-- Le mode conversation. RECORD_AUDIO est une permission d'execution :
+       `adb install -g` l'accorde, une reinstallation sans -g la reprendrait.
+       FOREGROUND_SERVICE_MICROPHONE est exigee depuis l'API 34 pour un
+       service qui declare ce type ; sans elle, startForeground leve
+       SecurityException des le premier tour. -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_creeper"
+               android:roundIcon="@mipmap/ic_creeper" android:hasCode="true">
+    <receiver android:name=".Recepteur" android:exported="true">
+      <intent-filter>
+        <action android:name="com.poste.pixel.SHOW" />
+        <action android:name="com.poste.pixel.HIDE" />
+        <action android:name="com.poste.pixel.STOP" />
+        <action android:name="com.poste.pixel.GO" />
+        <action android:name="com.poste.pixel.BULLE" />
+        <action android:name="com.poste.pixel.CACHER" />
+        <action android:name="com.poste.pixel.CADRE" />
+        <action android:name="com.poste.pixel.FILTRE" />
+        <action android:name="com.poste.pixel.FILTRE_AUTO" />
+        <!-- L'avis de rapport en attente, avec l'appui qui lance la lecture.
+             Voir Avis.java. -->
+        <action android:name="com.poste.pixel.AVIS" />
+      </intent-filter>
+    </receiver>
+    <!-- La pastille se repose elle-meme apres un redemarrage : sans ceci, elle
+         ne revient qu'au premier passage du garde, donc jamais si hote-1 dort. -->
+    <receiver android:name=".Demarrage" android:exported="true"
+              android:directBootAware="false">
+      <intent-filter android:priority="900">
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <!-- BOOT_COMPLETED est un broadcast protege : le shell adb ne peut pas
+             le simuler, donc la restauration serait intestable sans reboot
+             reel. Cette action-ci n'est pas protegee et emprunte exactement le
+             meme chemin : `pixel bulle restaurer` la declenche. -->
+        <action android:name="com.poste.pixel.RESTAURER" />
+      </intent-filter>
+    </receiver>
+    <!-- Le mode conversation vocale. Voir Voix.java.
+         Demarre par adb (`am start-foreground-service`), jamais par le
+         Recepteur : depuis Android 14 un BroadcastReceiver en arriere-plan
+         ne peut pas demarrer un service de premier plan.
+         exported=true parce que l'appelant est le shell adb, pas nous. -->
+    <service android:name=".Voix"
+             android:exported="true"
+             android:foregroundServiceType="microphone|mediaPlayback">
+      <intent-filter>
+        <action android:name="com.poste.pixel.VOIX" />
+        <!-- Vise directement par l'appui sur l'avis, en getForegroundService :
+             depuis Android 14 un receveur en arriere-plan ne peut pas demarrer
+             un service de premier plan, seul le tap d'une notification porte
+             l'exemption, et seulement s'il vise le service sans detour. -->
+        <action android:name="com.poste.pixel.VOIXDIRE" />
+        <action android:name="com.poste.pixel.VOIXREP" />
+        <action android:name="com.poste.pixel.VOIXATTENTE" />
+        <action android:name="com.poste.pixel.VOIXFIN" />
+        <action android:name="com.poste.pixel.VOIXTAIRE" />
+        <action android:name="com.poste.pixel.VOIXPAUSE" />
+        <action android:name="com.poste.pixel.VOIXREJOUER" />
+      </intent-filter>
+    </service>
+    <!-- Lecture a voix haute par le moteur du telephone, pilotee depuis la
+         notification media. Voir Lecteur.java. Demarre par adb ou par .Presse. -->
+    <service android:name=".Lecteur"
+             android:exported="true"
+             android:foregroundServiceType="mediaPlayback">
+      <intent-filter>
+        <action android:name="com.poste.pixel.LIRE" />
+        <action android:name="com.poste.pixel.LIRETEXTE" />
+      </intent-filter>
+    </service>
+    <!-- Le seul moyen, sans root, de faire taire l'avertissement systeme
+         « s'affiche par-dessus les autres applications ». Voir Silencieux.java.
+         A autoriser une fois :
+         adb shell cmd notification allow_listener com.poste.pixelgarde/.Silencieux -->
+    <service android:name=".Silencieux"
+             android:exported="true"
+             android:label="@string/app_name"
+             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+    <!-- Lecture du presse-papier (2026-09-24) : activite transparente qui
+         prend le focus une fraction de seconde, ecrit files/presse.txt et se
+         ferme. Voir Presse.java. -->
+    <!-- L'ecran Missions (2026-10-03) : quota, missions, dossiers. Voir
+         Missions.java. Ouvert par le bouton « Missions » de la bulle.
+         exported=true : hote-1 l'ouvre aussi par adb (verification, raccourci).
+         Une autre appli qui l'ouvrirait ne montre que l'ecran, sans le jeton. -->
+    <activity android:name=".Missions"
+              android:exported="true"
+              android:label="@string/missions_label"
+              android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+              android:configChanges="orientation|screenSize|uiMode"
+              android:taskAffinity="com.poste.pixelgarde.missions"
+              android:launchMode="singleTask" />
+    <!-- L'icone du lanceur : seule porte pour rallumer la barre apres un
+         Masquer total. Translucide, elle se ferme aussitot. -->
+    <activity android:name=".Reveil"
+              android:label="@string/reveil_label"
+              android:exported="true"
+              android:theme="@android:style/Theme.Translucent.NoTitleBar"
+              android:excludeFromRecents="true"
+              android:noHistory="true"
+              android:taskAffinity="">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".Presse"
+              android:exported="true"
+              android:theme="@android:style/Theme.Translucent.NoTitleBar"
+              android:excludeFromRecents="true"
+              android:noHistory="true"
+              android:taskAffinity="" />
+    <!-- RETIRE le 2026-08-30 : le service d'accessibilite .Vue, la grille des
+         applications recentes (.Grille) et ses deux portes (.Lancer, .Tuile).
+         Le service portait un bouton dans la barre de navigation, mais les
+         applications bancaires refusent de demarrer des qu'un service
+         d'accessibilite est actif, quel qu'il soit. Prive de takeScreenshot,
+         qui n'est ouvert qu'a ces services, la grille n'avait plus d'apercus
+         et ne valait plus le bouton natif d'Android : USER l'a fait retirer
+         en entier le meme jour.
+         Ne rien reintroduire de tout cela sans son accord explicite. -->
+  </application>
+</manifest>

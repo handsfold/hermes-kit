@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Reprise de l'ADB du Pixel quand il tombe (2026-10-27).
+
+POURQUOI CE FICHIER EXISTE
+Le 2026-10-27, le garde est reste "telephone injoignable, nouvel essai dans
+30 s" de 04:26 a 11:08 (601 lignes), puis ADB muet de 18:40 a 20:24, sans que
+personne soit prevenu. Le garde ne faisait que `adb connect` puis un balayage :
+jamais de `disconnect` (un transport mort reste enregistre cote serveur adb,
+`connect` repond "already connected" et chaque commande pend), jamais de
+`kill-server`, et aucune alerte. Cause type notee dans les messages H42667
+(2026-10-23) et H24915 (2026-10-03) : ADB bloque alors que le reseau repond.
+
+PALIERS (une passe, rejouee toutes les 15 s pendant 5 min) :
+  1. disconnect puis connect sur Tailscale, sur le LAN connu, sur l'adresse en cache ;
+  2. `pixel etat` (resoudre() : balayage du /24 sur le port 5555) ;
+  3. apres 2 min, une seule fois par panne : kill-server + start-server, puis
+     reconnexion du Pixel et des autres telephones qui etaient connectes (A07) ;
+  4. mDNS : un service _adb-tls-connect dont le modele est celui du Pixel.
+Il n'y a pas de palier "relance du debogage sans fil par l'A07" : l'app
+com.entreprise-a.adbrelance ne relance que le A07 lui-meme, rien ne sait le faire
+sur le Pixel stock (pas de root, pas d'accessibilite).
+
+ECHEC : une seule alerte par panne dans le QG (Telegram), bouton "Reessayer"
+(callback pixel:reessayer, plugin Hermes pixel-bouton). Ensuite, une passe
+silencieuse toutes les 2 min tant que la panne dure.
+
+JAMAIS : si /tmp/pixel-stop existe (arret voulu par USER), on ne touche a rien.
+Aucun appel a un LLM, donc rien a mesurer cote tokens.
+
+Usage : pixel-reprise            appele par le garde, borne 5 min
+        pixel-reprise --force    bouton Reessayer : 90 s, rend une ligne OK/ECHEC
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+ADB = os.environ.get("ADB_REEL", "/usr/lib/android-sdk/platform-tools/adb")
+ICI = os.path.dirname(os.path.abspath(__file__))
+PIXEL = os.path.join(ICI, "pixel")
+HORS_PIXEL = os.path.join(ICI, "hors-pixel.txt")
+STOP = os.environ.get("PIXEL_REPRISE_STOP", "/tmp/pixel-stop")
+MODELE = os.environ.get("PIXEL_REPRISE_MODELE", "Pixel 9 Pro XL")
+ADRESSES = os.environ.get("PIXEL_REPRISE_ADRESSES",
+                          "__PIXEL_IP__:5555 __LAN_IP__:5555").split()
+CACHE = "/tmp/pixel-adresse"
+DOSSIER = os.path.expanduser("~/.local/state/pixel-reprise")
+ETAT = os.environ.get("PIXEL_REPRISE_ETAT", os.path.join(DOSSIER, "etat.json"))
+VERROU = os.environ.get("PIXEL_REPRISE_VERROU", "/tmp/pixel-reprise.lock")
+DELAI = int(os.environ.get("PIXEL_REPRISE_DELAI", "300"))
+PAS = int(os.environ.get("PIXEL_REPRISE_PAS", "15"))
+SILENCE = int(os.environ.get("PIXEL_REPRISE_SILENCE", "120"))
+CHAT = "__QG_CHAT__"
+TOPIC = os.environ.get("PIXEL_REPRISE_TOPIC", "2923")      # le QG
+PREFIXE = os.environ.get("PIXEL_REPRISE_PREFIXE", "")      # "TEST : " en essai
+
+
+def log(msg):
+    print("pixel-reprise : " + msg, flush=True)
+
+
+def adb(args, timeout=8):
+    try:
+        return subprocess.run([ADB] + args, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def repond(addr):
+    """Le telephone repond ET c'est le Pixel (le A07 partage le port 5555)."""
+    r = adb(["-s", addr, "shell", "getprop", "ro.product.model"], timeout=8)
+    return bool(r and r.returncode == 0 and MODELE in (r.stdout or ""))
+
+
+def connectes():
+    r = adb(["devices", "-l"], timeout=8)
+    sorties = []
+    for l in ((r.stdout if r else "") or "").splitlines()[1:]:
+        p = l.split()
+        if len(p) >= 2 and ":" in p[0]:
+            sorties.append((p[0], p[1], l))
+    return sorties
+
+
+def pixel_ok():
+    """Adresse du Pixel qui repond vraiment, ou None. Teste, ne se fie pas a `devices`."""
+    vus = [a for a, etat, l in connectes() if etat == "device" and MODELE.replace(" ", "_") in l]
+    for a in vus:
+        if repond(a):
+            return a
+    return None
+
+
+def candidates():
+    liste = list(ADRESSES)
+    try:
+        c = open(CACHE).read().strip()
+        if c and c not in liste:
+            liste.append(c)
+    except OSError:
+        pass
+    return liste
+
+
+def palier1():
+    for a in candidates():
+        adb(["disconnect", a], timeout=5)
+        adb(["connect", a], timeout=8)
+        if repond(a):
+            return a
+    return None
+
+
+def palier2():
+    try:
+        subprocess.run([sys.executable, PIXEL, "etat"], capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        pass
+    return pixel_ok()
+
+
+def autres_telephones():
+    """Les serie `device` hors Pixel (A07) : a reconnecter apres un kill-server."""
+    return [a for a, etat, l in connectes()
+            if etat == "device" and MODELE.replace(" ", "_") not in l]
+
+
+def palier3():
+    autres = autres_telephones()
+    log("palier 3 : kill-server (autres telephones a reconnecter : {})".format(len(autres)))
+    adb(["kill-server"], timeout=10)
+    adb(["start-server"], timeout=15)
+    for a in autres:
+        adb(["connect", a], timeout=8)
+    return palier1()
+
+
+def palier4():
+    r = adb(["mdns", "services"], timeout=8)
+    connus = set()
+    try:
+        for l in open(HORS_PIXEL):
+            if l.strip() and not l.startswith("#"):
+                connus.add(l.split()[0])
+    except OSError:
+        pass
+    for l in ((r.stdout if r else "") or "").splitlines():
+        m = re.search(r"_adb-tls-connect\S*\s+(\d+\.\d+\.\d+\.\d+:\d+)", l)
+        if not m or m.group(1).split(":")[0] in connus:
+            continue
+        adb(["connect", m.group(1)], timeout=8)
+        if repond(m.group(1)):
+            return m.group(1)
+    return None
+
+
+def lire_etat():
+    try:
+        return json.load(open(ETAT))
+    except (OSError, ValueError):
+        return {}
+
+
+def ecrire_etat(d):
+    os.makedirs(os.path.dirname(ETAT), exist_ok=True)
+    tmp = ETAT + ".tmp"
+    json.dump(d, open(tmp, "w"))
+    os.replace(tmp, ETAT)
+
+
+def alerter(minutes):
+    texte = ("{}Pixel injoignable en ADB depuis environ {} min. Reprise automatique sans succes "
+             "(disconnect/connect Tailscale et LAN, balayage, kill-server, mDNS). "
+             "Verifier que le debogage sans fil est actif sur le telephone, puis Reessayer."
+             ).format(PREFIXE, minutes)
+    boutons = {"inline_keyboard": [[{"text": "Réessayer", "callback_data": "pixel:reessayer"}]]}
+    if os.environ.get("PIXEL_REPRISE_SEC"):
+        log("[a blanc] " + texte)
+        return True
+    tok = None
+    for l in open(os.path.expanduser("~/.hermes/.env")):
+        if l.startswith("TELEGRAM_BOT_TOKEN="):
+            tok = l.strip().split("=", 1)[1]
+            break
+    if not tok:
+        log("pas de jeton Telegram, alerte non envoyee")
+        return False
+    data = urllib.parse.urlencode({"chat_id": CHAT, "message_thread_id": TOPIC, "text": texte,
+                                   "reply_markup": json.dumps(boutons)}).encode()
+    try:
+        urllib.request.urlopen("https://api.telegram.org/bot{}/sendMessage".format(tok),
+                               data, timeout=20).read()
+        return True
+    except Exception as e:      # noqa: BLE001
+        log("alerte non envoyee : {}".format(type(e).__name__))
+        return False
+
+
+def une_passe(etat, depuis):
+    """Les paliers dans l'ordre. Rend l'adresse ou None."""
+    a = pixel_ok() or palier1() or palier2()
+    if a:
+        return a
+    if (time.time() - depuis >= 120 and not etat.get("kill_fait")
+            and not os.environ.get("PIXEL_REPRISE_SANS_KILL")):
+        etat["kill_fait"] = True
+        ecrire_etat(etat)
+        a = palier3()
+        if a:
+            return a
+    return palier4()
+
+
+def main():
+    force = "--force" in sys.argv
+    if os.path.exists(STOP):
+        log("verrou d'arret pose ({}), la main reste a USER, rien touche".format(STOP))
+        return 4
+    os.makedirs(os.path.dirname(VERROU) or "/", exist_ok=True)
+    verrou = open(VERROU, "w")
+    try:
+        fcntl.flock(verrou, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log("une reprise tourne deja")
+        return 3
+    now = time.time()
+    etat = lire_etat()
+    if etat and not force and etat.get("alerte") and now - etat.get("dernier", 0) < SILENCE:
+        return 3          # panne deja signalee : une passe discrete toutes les 2 min
+    a = pixel_ok()
+    if a:
+        if etat:
+            log("Pixel de retour sur {} (panne de {} s)".format(a, int(now - etat.get("debut", now))))
+            ecrire_etat({})
+        if force:
+            print("OK " + a)
+        return 0
+    if force or not etat.get("debut"):
+        etat = {"debut": now, "alerte": etat.get("alerte", False),
+                "kill_fait": False if force else etat.get("kill_fait", False)}
+    etat["dernier"] = now
+    ecrire_etat(etat)
+    depuis = etat["debut"]
+    limite = (now + 90) if force else (depuis + DELAI if not etat["alerte"] else now + 1)
+    log("Pixel injoignable, reprise (panne depuis {} s)".format(int(now - depuis)))
+    while True:
+        if os.path.exists(STOP):
+            log("verrou d'arret pose en cours de route, j'arrete")
+            return 4
+        a = une_passe(etat, depuis)
+        if a:
+            log("Pixel de retour sur {} apres {} s".format(a, int(time.time() - depuis)))
+            ecrire_etat({})
+            if force:
+                print("OK " + a)
+            return 0
+        if time.time() >= limite:
+            break
+        time.sleep(PAS)
+    etat["dernier"] = time.time()
+    if not etat["alerte"] and not force:
+        etat["alerte"] = alerter(int((time.time() - depuis) / 60))
+        log("echec apres {} s, alerte {}".format(int(time.time() - depuis),
+                                                 "envoyee" if etat["alerte"] else "NON envoyee"))
+    else:
+        log("echec, panne toujours la")
+    ecrire_etat(etat)
+    if force:
+        print("ECHEC")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

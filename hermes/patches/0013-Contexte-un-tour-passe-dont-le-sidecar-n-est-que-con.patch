@@ -1,0 +1,165 @@
+From d77ce4a3959482053817b667e31b2ed3cdd4cc70 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Contexte : un tour passe dont le sidecar n'est que contenu +
+ injections est rejoue nu
+
+Rejouer un sidecar par tour passe renvoyait un bloc memory-context par tour :
+113 copies et 82k tokens dans une seule session (43 % de la relecture).
+HERMES_REPLAY_KEEP_INJECTIONS=1 restaure l'ancien comportement. Tests ajustes.
+
+Retouche: R20
+---
+ agent/turn_context.py                   | 32 ++++++++++++++++++++-
+ tests/agent/test_api_content_sidecar.py | 38 +++++++++++++++++++++----
+ tests/agent/test_replay_cleanup.py      |  7 ++++-
+ 3 files changed, 70 insertions(+), 7 deletions(-)
+
+diff --git a/agent/turn_context.py b/agent/turn_context.py
+index 27fe703a9b..cda5407df3 100644
+--- a/agent/turn_context.py
++++ b/agent/turn_context.py
+@@ -9,6 +9,7 @@ returns a ``TurnContext`` with only the locals the loop reads back.
+ from __future__ import annotations
+ 
+ import logging
++import os
+ import sys
+ import threading
+ import time
+@@ -103,6 +104,26 @@ def substitute_api_content(api_msg: Dict[str, Any]) -> Optional[str]:
+     return sidecar
+ 
+ 
++def is_injection_only_sidecar(content: Any, sidecar: Any) -> bool:
++    """True when ``sidecar`` is exactly ``content`` plus an appended injection block.
++
++    ``compose_user_api_content`` builds the sidecar as ``content + "\n\n" + injections``
++    (memory-context, ``pre_llm_call`` hook output). Replaying one sidecar per past user
++    turn re-sends one copy of those blocks per turn: measured at 113 copies and 82k
++    tokens inside a single session, 43 % of everything the provider read back. Only the
++    current turn's injection still carries information the model needs.
++
++    The check is a prefix test, so a rewritten, image-bearing or sanitize-divergent
++    sidecar never matches and is replayed verbatim as before. Set
++    ``HERMES_REPLAY_KEEP_INJECTIONS=1`` to restore the previous behaviour wholesale."""
++    if os.environ.get("HERMES_REPLAY_KEEP_INJECTIONS", "").strip() in {"1", "true", "yes"}:
++        return False
++    if not isinstance(content, str) or not isinstance(sidecar, str):
++        return False
++    body, tail = content.strip(), sidecar.strip()
++    return bool(body) and len(tail) > len(body) and tail.startswith(body)
++
++
+ def drop_stale_api_content(msg: Dict[str, Any]) -> None:
+     """Drop the ``api_content`` sidecar from a message whose content was rewritten
+     (replaying it would resend what the rewrite removed; cost is one cache miss)."""
+@@ -1104,7 +1125,16 @@ def build_api_messages(
+             # Historical row: replay the exact bytes sent live so the prompt-cache
+             # prefix stays byte-stable. User rows carry the injection sidecar; user
+             # and assistant rows may carry a sanitize-divergence sidecar.
+-            api_msg["content"] = _api_content
++            # Exception: a past user turn whose sidecar is only its own content plus
++            # that turn's injections replays the bare content instead. Keeping it cost
++            # one duplicate memory-context block per past turn (see
++            # is_injection_only_sidecar); the price is one cache miss on the tail.
++            if msg.get("role") == "user" and is_injection_only_sidecar(
++                api_msg.get("content"), _api_content
++            ):
++                pass
++            else:
++                api_msg["content"] = _api_content
+ 
+         # Pass reasoning back to the API for ALL assistant messages so multi-turn
+         # reasoning context is preserved.
+diff --git a/tests/agent/test_api_content_sidecar.py b/tests/agent/test_api_content_sidecar.py
+index 2f65df5c1b..66b94ef65b 100644
+--- a/tests/agent/test_api_content_sidecar.py
++++ b/tests/agent/test_api_content_sidecar.py
+@@ -516,16 +516,17 @@ class TestWireInvariant:
+         assert user_rows[0]["content"] == "hello please"
+         assert user_rows[0]["api_content"] == sent_1
+ 
+-    def test_next_turn_replays_previous_turn_bytes(self, wire_env):
+-        """The cache invariant: the serialized user message replayed in turn
+-        N+1 (history reloaded from the store) EQUALS the bytes turn N sent."""
++    def test_next_turn_drops_the_previous_turn_injection(self, wire_env):
++        """A past user turn whose sidecar is only its own content plus that
++        turn's injections replays the bare content: the injection block is not
++        re-sent once per historical turn."""
+         make_agent, handler, db, sid = wire_env
+ 
+         # ── Turn N ──
+         agent1 = make_agent()
+         agent1.run_conversation("hello please", conversation_history=[], task_id="t1")
+         turn_n_user = _user_messages(_chat_requests(handler)[0])[0]
+-        turn_n_bytes = json.dumps(turn_n_user, sort_keys=True)
++        assert turn_n_user["content"] == "hello please\n\nPLUGIN-CTX"
+ 
+         # ── Turn N+1: fresh agent, history reloaded from the store ──
+         history = db.get_messages_as_conversation(sid)
+@@ -540,12 +541,39 @@ class TestWireInvariant:
+         )
+ 
+         replayed = _user_messages(_chat_requests(handler)[0])[0]
+-        assert json.dumps(replayed, sort_keys=True) == turn_n_bytes
++        assert replayed["content"] == "hello please"
++        assert "PLUGIN-CTX" not in replayed["content"]
+ 
+         # And the new current-turn message got its own injection + sidecar.
+         current = _user_messages(_chat_requests(handler)[0])[-1]
+         assert current["content"] == "second question\n\nPLUGIN-CTX"
+ 
++        # Exactly one copy of the injection on the wire, on the live turn only.
++        wire = json.dumps(_chat_requests(handler)[0], sort_keys=True)
++        assert wire.count("PLUGIN-CTX") == 1
++
++    def test_divergent_sidecar_still_replays_verbatim(self, wire_env):
++        """A sidecar that is NOT a prefix-extension of its row (rewritten row,
++        evicted image, sanitize divergence) keeps the byte-stable replay."""
++        make_agent, handler, db, sid = wire_env
++
++        agent1 = make_agent()
++        agent1.run_conversation("hello please", conversation_history=[], task_id="t1")
++
++        history = db.get_messages_as_conversation(sid)
++        # Simulate a divergence: the row content no longer prefixes the sidecar.
++        history[0]["content"] = "hello rewritten"
++        history[0]["api_content"] = "hello please\n\nPLUGIN-CTX"
++
++        handler.captured_requests = []
++        agent2 = make_agent()
++        agent2.run_conversation(
++            "second question", conversation_history=history, task_id="t2"
++        )
++
++        replayed = _user_messages(_chat_requests(handler)[0])[0]
++        assert replayed["content"] == "hello please\n\nPLUGIN-CTX"
++
+ 
+ # ---------------------------------------------------------------------------
+ # Review fixes: re-anchoring, MoA, in-place compaction backfill, override
+diff --git a/tests/agent/test_replay_cleanup.py b/tests/agent/test_replay_cleanup.py
+index f97acaff9e..4b4e5e945e 100644
+--- a/tests/agent/test_replay_cleanup.py
++++ b/tests/agent/test_replay_cleanup.py
+@@ -161,13 +161,18 @@ def test_send_wire_matches_replay_wire_after_db_round_trip(tmp_path):
+     # What every resume surface feeds the model, with the sidecar bytes the send path replays.
+     replay = [{**m, "content": m.get("api_content") or m.get("content")}
+               for m in canonicalize_replay_history(persisted, now=now)]
++    # The first user row's sidecar is only its own content plus that turn's
++    # injections, so it replays bare: the injection block is not re-sent once
++    # per past turn (see is_injection_only_sidecar). A divergent sidecar still
++    # replays verbatim, covered in test_api_content_sidecar.py.
++    replay[0]["content"] = "hello"
+     live = copy.deepcopy(persisted) + [{"role": "user", "content": "now", "timestamp": now}]
+     frozen = copy.deepcopy(live)
+     request = _send(_SendAgent(), live)
+ 
+     assert live == frozen
+     assert _wire(request) == _wire(replay + [{"role": "user", "content": "now"}])
+-    assert "[with memory]" in request[0]["content"] and "EXPIRED" in request[2]["content"]
++    assert request[0]["content"] == "hello" and "EXPIRED" in request[2]["content"]
+     assert [m["role"] for m in request] == ["user", "assistant", "user", "assistant", "tool", "tool", "user"]
+     assert (request[4]["content"], request[5]["content"]) == (grep_hit, doc_text)
+ 

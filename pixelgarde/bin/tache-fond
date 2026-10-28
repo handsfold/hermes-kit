@@ -1,0 +1,42 @@
+#!/bin/bash
+# Lance une tache planifiee qui touche un telephone, en la declarant « de fond ».
+#
+# POURQUOI CE FICHIER EXISTE (2026-10-05)
+# USER : la veille LINE se declenchait au milieu de ses automatisations du
+# telephone et faisait bugger le workflow. adb-garde donne la priorite au
+# pilotage (agent, terminal). Ce lanceur fait l'autre moitie :
+#   - il pose ADB_FOND=1, donc les appels adb de la tache ne marquent pas
+#     l'appareil occupe et ses commandes qui modifient l'ecran sont refusees
+#     tant qu'un agent pilote ;
+#   - il tient le verrou /tmp/adb-priorite/fond-<appareil>.lock pendant toute
+#     la tache : un agent qui arrive attend qu'elle ait fini (90 s max) ;
+#   - avec --ceder, il saute le passage entier si un agent pilote depuis
+#     moins de 10 min (ex. installer un APK).
+#
+#   tache-fond <appareil> [--ceder] -- <commande> [args...]
+#   appareil : pixel, ou le nom de hors-pixel.txt (A07)
+set -u
+appareil=${1:?appareil manquant}; shift
+ceder=0
+[ "${1:-}" = --ceder ] && { ceder=1; shift; }
+[ "${1:-}" = -- ] && shift
+# Deja dans une tache de fond (la veille relance a07-garde) : pas de 2e verrou.
+[ -n "${ADB_FOND:-}" ] && exec "$@"
+export ADB_FOND=1
+PRIORITE=/tmp/adb-priorite
+BAIL=${ADB_BAIL:-600}
+mkdir -p "$PRIORITE"
+log() { printf '%s  %s %s : %s\n' "$(date -Is)" "$appareil" "$(basename "$1")" "$2" >> "$PRIORITE/journal.log"; }
+if [ "$ceder" = 1 ]; then
+  m=$(stat -c %Y "$PRIORITE/main-$appareil" 2>/dev/null || echo 0)
+  if [ $(( $(date +%s) - m )) -lt "$BAIL" ]; then
+    log "$1" "passage saute, un agent pilote"
+    exit 0
+  fi
+fi
+exec 9>"$PRIORITE/fond-$appareil.lock"
+if ! flock -w 120 9; then
+  log "$1" "verrou tenu depuis 120 s, passage saute"
+  exit 0
+fi
+exec "$@"

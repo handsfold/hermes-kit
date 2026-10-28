@@ -1,0 +1,71 @@
+From 590f4be6006619137577dc04d22c996cf49518b5 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Compactage : le resume est confie a Sonnet quand la session
+ tourne sur un modele de la famille Anthropic
+
+Resumer avec le modele du chat revient a payer un modele de raisonnement pour
+une tache de redaction. Sur les familles Anthropic (opus, sonnet, fable), le resume
+passe par Sonnet 5.5 en effort bas. Haiku et les autres familles gardent le modele
+de leur session : un topic de red-teaming resume par un modele aligne se
+ferait refuser le resume.
+
+Retouche: R01
+---
+ agent/context_compressor.py | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/agent/context_compressor.py b/agent/context_compressor.py
+index 41d92dee2b..1faf9cbbb5 100644
+--- a/agent/context_compressor.py
++++ b/agent/context_compressor.py
+@@ -7,6 +7,7 @@ import copy
+ import hashlib
+ import json
+ import logging
++import os
+ import sqlite3
+ import re
+ import time
+@@ -1675,6 +1676,32 @@ Describe agent/tool work only as completed actions, state, or historical work.]"
+ }
+ 
+ 
++# Familles Claude alignees : sur ces sessions, resumer avec le modele du chat
++# revient a payer un modele de raisonnement pour une tache de redaction. Sonnet
++# resume aussi bien, plus vite, et pour une fraction du prix.
++#
++# Tout le reste garde le modele de sa session, et ce n'est pas une economie
++# oubliee : un topic de red-teaming resume par un modele aligne se fait refuser
++# le resume, et la session perd sa memoire d'un coup. Mieux vaut payer.
++_FAMILLES_ALIGNEES = ("claude-opus", "claude-sonnet", "claude-haiku", "claude-fable")
++_MODELE_RESUME_ALIGNE = os.environ.get("HERMES_MODELE_RESUME", "claude-sonnet-5-5-low")
++
++
++def modele_resume_adapte(modele_session: str) -> str:
++    """Choisir qui resume, a partir de qui parle.
++
++    Renvoie "" pour dire : garde le modele de la session.
++    """
++    m = (modele_session or "").strip().lower()
++    if not any(f in m for f in _FAMILLES_ALIGNEES):
++        return ""
++    # Deja aussi leger, ou deja le bon : ne rien forcer. Imposer sonnet a une
++    # session haiku ferait monter la note au lieu de la baisser.
++    if _MODELE_RESUME_ALIGNE.lower() in m or "claude-haiku" in m:
++        return ""
++    return _MODELE_RESUME_ALIGNE
++
++
+ class ContextCompressor(SummaryDispatchMixin, MicroCompactionMixin, ContextEngine):
+     """Default context engine: prune tool results, protect head/tail, summarize the middle
+     with an LLM, and iteratively update the previous summary on later compactions."""
+@@ -2377,7 +2404,7 @@ class ContextCompressor(SummaryDispatchMixin, MicroCompactionMixin, ContextEngin
+         self._context_probed = False  # True after a step-down from context error
+         self.last_prompt_tokens = self.last_completion_tokens = 0
+         self._reset_real_usage_pairing()
+-        self.summary_model = summary_model_override or ""
++        self.summary_model = summary_model_override or modele_resume_adapte(model)
+         self._session_db: Any = None
+         self._session_id: str = ""
+         # Per-session state (also reset by /new, /reset and session end).

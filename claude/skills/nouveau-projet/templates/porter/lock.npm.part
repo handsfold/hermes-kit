@@ -1,0 +1,33 @@
+  #
+  # CE QUE CE PROJET N'A PAS, et qu'il faut savoir : npm ne sait pas imposer un
+  # DÉLAI avant d'accepter une version fraîchement publiée. C'est pourtant la
+  # seule barrière qui protège d'un paquet compromis ce matin ; les deux autres
+  # ne voient que ce qui est déjà connu. Remède le jour où on migrera : pnpm et
+  # son pnpm-workspace.yaml (section 10 du socle). D'ici là la date se vérifie
+  # à la main : npm view <paquet> time.<version>, sept jours minimum.
+  lock_sain() {
+    local ko=0
+    if [ ! -f package-lock.json ]; then
+      echo "  package-lock.json absent : l'installation n'est pas reproductible."
+      echo "  Remède : npm install, puis commiter le lock."
+      ko=1
+    elif ! git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+      echo "  package-lock.json n'est pas suivi par git : il ne fige rien pour personne d'autre."
+      echo "  Remède : git add package-lock.json"
+      ko=1
+    fi
+    if [ -f pnpm-lock.yaml ] || [ -f yarn.lock ]; then
+      echo "  Deux fichiers lock coexistent : deux arbres de dépendances possibles."
+      echo "  Remède : supprimer celui qui n'est pas celui du déploiement."
+      ko=1
+    fi
+    return "$ko"
+  }
+  etape "Lock unique et commité" lock_sain
+
+  # Un audit n'est pas un antivirus : il ne voit que les failles DÉJÀ publiées.
+  # Non bloquant, parce que la dette est héritée et qu'un garde-fou impossible à
+  # satisfaire aujourd'hui apprend surtout à ignorer la sortie.
+  if [ "$CIBLE" != "--fast" ]; then
+    avertir "Audit dépendances (réseau)" npm audit --audit-level high
+  fi

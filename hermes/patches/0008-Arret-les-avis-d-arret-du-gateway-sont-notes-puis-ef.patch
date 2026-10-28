@@ -1,0 +1,145 @@
+From f6b169cc4550e8b1da0587241e97f20d7f244224 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Arret : les avis d'arret du gateway sont notes puis effaces
+ au boot suivant, et tus si rien ne tourne
+
+_record_shutdown_notice ecrit l'identifiant de chaque avis dans
+shutdown_notices.json (lu par scripts/purge-avis-arret.py qui efface les messages
+au demarrage). thread_id est transmis a _send_shutdown_notice. Aucun avis au
+salon d'accueil quand aucun agent n'est en vol (2026-10-04, redem-sur.sh attend
+justement le calme).
+
+Retouche: R09
+---
+ gateway/run_shutdown.py | 66 +++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 60 insertions(+), 6 deletions(-)
+
+diff --git a/gateway/run_shutdown.py b/gateway/run_shutdown.py
+index 52bf07449a..67be2c1073 100644
+--- a/gateway/run_shutdown.py
++++ b/gateway/run_shutdown.py
+@@ -144,6 +144,38 @@ def _notice_target_key(platform_value: str, chat_id, thread_id) -> tuple:
+     return (platform_value, str(chat_id), str(thread_id) if thread_id else None)
+ 
+ 
++def _record_shutdown_notice(platform_str, chat_id, thread_id, result) -> None:
++    """Note l'identifiant d'un avis d'arret pour que le boot suivant l'efface.
++
++    Ecrit dans $HERMES_HOME/shutdown_notices.json ; le script
++    scripts/purge-avis-arret.py le lit au demarrage du service, supprime les
++    messages puis vide le fichier. Best-effort : jamais d'exception remontee,
++    l'arret du gateway prime sur le confort de lecture.
++    """
++    try:
++        message_id = getattr(result, "message_id", None)
++        if not message_id:
++            return
++        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
++        path = home / "shutdown_notices.json"
++        try:
++            data = json.loads(path.read_text(encoding="utf-8"))
++            if not isinstance(data, list):
++                data = []
++        except Exception:
++            data = []
++        data.append({
++            "platform": str(platform_str),
++            "chat_id": str(chat_id),
++            "thread_id": str(thread_id) if thread_id else None,
++            "message_id": str(message_id),
++        })
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_text(json.dumps(data[-50:]), encoding="utf-8")
++    except Exception:
++        pass
++
++
+ class GatewayShutdownMixin:
+     """Stop/drain/restart, scale-to-zero and active-work accounting methods for GatewayRunner."""
+ 
+@@ -899,19 +931,28 @@ class GatewayShutdownMixin:
+         return None, _parsed["platform"], _parsed["chat_id"], _parsed.get("thread_id"), _parsed.get("profile")
+ 
+     async def _send_shutdown_notice(
+-        self, adapter, chat_id: str, msg: str, kind: str, platform_str: str, **send_kwargs
++        self, adapter, chat_id: str, msg: str, kind: str, platform_str: str,
++        thread_id=None, **send_kwargs
+     ) -> bool:
+-        """Send one shutdown notice; True when delivered. Failures are debug-logged, never raised."""
++        """Send one shutdown notice; True when delivered. Failures are debug-logged, never raised.
++
++        The delivered message id is recorded so the next boot can erase the notice.
++        """
+         where = "home channel " if kind == "home channel" else ""
+         fail_fmt = f"Failed to send shutdown notification to {where}%s:%s: %s"
+-        if not await self._send_notice_logged(adapter, chat_id, msg, platform_str, fail_fmt, **send_kwargs):
++        sent: list = []
++        if not await self._send_notice_logged(
++            adapter, chat_id, msg, platform_str, fail_fmt, notice_sink=sent, **send_kwargs
++        ):
+             return False
++        if sent:
++            _record_shutdown_notice(platform_str, chat_id, thread_id, sent[0])
+         logger.info("Sent shutdown notification to %s %s:%s", kind, platform_str, chat_id)
+         return True
+ 
+     @staticmethod
+     async def _send_notice_logged(
+-        adapter, chat_id: str, msg: str, platform_str: str, fail_fmt: str, raise_fmt: Optional[str] = None, **kw
++        adapter, chat_id: str, msg: str, platform_str: str, fail_fmt: str, raise_fmt: Optional[str] = None, notice_sink: Optional[list] = None, **kw
+     ) -> bool:
+         """``adapter.send`` whose failure is debug-logged as ``fmt % (platform, chat, error)`` — ``fail_fmt``
+         for success=False, ``raise_fmt`` (default ``fail_fmt``) for a raise; True only on a delivered send."""
+@@ -923,6 +964,8 @@ class GatewayShutdownMixin:
+         if _send_failed(result):
+             logger.debug(fail_fmt, platform_str, chat_id, _send_error(result))
+             return False
++        if notice_sink is not None:
++            notice_sink.append(result)
+         return True
+ 
+     async def _notify_active_sessions_of_shutdown(self) -> None:
+@@ -944,7 +987,8 @@ class GatewayShutdownMixin:
+                     restart_source.platform.value, restart_source.chat_id, restart_source.thread_id
+                 )
+         notified: set[tuple[str, str, Optional[str]]] = set()
+-        for session_key in self._snapshot_running_agents():
++        _en_vol = list(self._snapshot_running_agents())
++        for session_key in _en_vol:
+             target = await self._shutdown_notification_target(session_key)
+             if target is None:
+                 continue
+@@ -974,7 +1018,10 @@ class GatewayShutdownMixin:
+             except Exception as e:
+                 logger.debug("Failed to send shutdown notification to %s:%s: %s", platform_str, chat_id, e)
+                 continue
+-            if await self._send_shutdown_notice(adapter, chat_id, msg, "active chat", platform_str, metadata=metadata):
++            if await self._send_shutdown_notice(
++                adapter, chat_id, msg, "active chat", platform_str,
++                thread_id=thread_id, metadata=metadata,
++            ):
+                 notified.add(dedup_key)
+         if self._restart_requested and restart_source is not None:
+             logger.debug("Skipping home-channel shutdown notifications for in-chat restart")
+@@ -988,6 +1035,12 @@ class GatewayShutdownMixin:
+                     "Home-channel shutdown broadcast suppressed by drain marker (suppress_notification=true)"
+                 )
+                 return
++        # Aucun tour en vol : l'avis au salon d'accueil disait « ta tache va etre
++        # interrompue » alors que rien ne tournait (2026-10-04, redem-sur.sh attend
++        # justement le calme). On se tait dans ce cas.
++        if not _en_vol:
++            logger.info("Home-channel shutdown broadcast skipped: no running agent")
++            return
+         # Snapshot adapters: adapter.send() can hit a fatal path (_handle_fatal) that pops the adapter
+         # from self.adapters -> ``RuntimeError: dictionary changed size during iteration``.
+         for platform, adapter in list(self.adapters.items()):
+@@ -1009,6 +1062,7 @@ class GatewayShutdownMixin:
+             # Home channels omit ``metadata=`` when empty (adapter doubles may not accept the kwarg).
+             if await self._send_shutdown_notice(
+                 adapter, str(home.chat_id), msg, "home channel", platform.value,
++                thread_id=home.thread_id,
+                 **({"metadata": metadata} if metadata else {}),
+             ):
+                 notified.add(dedup_key)

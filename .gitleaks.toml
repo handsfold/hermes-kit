@@ -1,0 +1,25 @@
+# Regles gitleaks du depot : les regles par defaut, plus ce qu'elles ignorent.
+# Le 2026-10-04, gitleaks 8.30 a laisse passer 3 jetons OAuth Anthropic
+# (sk-ant-oat01-...) dans un commit. D'ou les regles ci-dessous.
+# Les cles non vides des fichiers .exemple.* sont verifiees par outils/verifier-cles.py
+# (le moteur RE2 de gitleaks n'a pas de lookahead).
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "anthropic-token"
+description = "Jeton Anthropic (API ou OAuth)"
+regex = '''sk-ant-[a-z0-9]+-[A-Za-z0-9_-]{30,}'''
+keywords = ["sk-ant-"]
+
+[[rules]]
+id = "openrouter-key"
+description = "Cle OpenRouter"
+regex = '''sk-or-v1-[a-f0-9]{40,}'''
+keywords = ["sk-or-v1-"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Jeton de bot Telegram"
+regex = '''\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b'''

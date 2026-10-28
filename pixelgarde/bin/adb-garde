@@ -1,0 +1,218 @@
+#!/bin/bash
+# Garde-fou ADB : personne n'atteint le Pixel quand USER a arme l'arret.
+#
+# POURQUOI CE FICHIER EXISTE (25/08/2026)
+# Le verrou vivait dans le CLI `pixel`. N'importe quel autre agent lancant
+# `adb shell input tap` en direct passait a cote : le telephone repondait
+# alors que USER l'avait mis en pause. Un verrou qu'on peut contourner en
+# changeant de commande n'est pas un verrou. Il est donc descendu ici, sur
+# le binaire lui-meme, seul point de passage obligatoire de tout le monde.
+REEL=${ADB_REEL:-/usr/lib/android-sdk/platform-tools/adb}
+STOP=/tmp/pixel-stop
+HUMAIN=/tmp/pixel-humain
+JOURNAL=/tmp/pixel-adb-refus.log
+SILENCE=${PIXEL_SILENCE:-3}
+ATTENTE_MAX=${PIXEL_ATTENTE_MAX:-180}
+
+# Le relais reseau du Creeper (2026-10-03) : ce qui vise l'appli part par
+# HTTPS quand elle ecoute (creeper-relais.py), sinon par ADB comme avant.
+# Filtre en bash d'abord : python ne se lance que pour l'appli.
+RELAIS=$HOME/Bureau/Projets/contexte/bin/pixel/creeper-relais.py
+relayer() {
+  case "$*" in *com.poste.pixelgarde*) ;; *) return 0 ;; esac
+  [ -n "$PIXEL_SANS_RELAIS" ] && return 0
+  [ -x "$RELAIS" ] && "$RELAIS" deposer "$@" && exit 0
+  # Repli ADB borne : sans Tailscale, adb attend sans fin et garde le verrou
+  # du rapport (2026-10-03 : rapport 962 bloque, chaque appui ignore).
+  REEL_BORNE="timeout 20"
+  return 0
+}
+REEL_BORNE=
+
+# Pixel injoignable : echouer vite au lieu d'attendre sans fin (2026-10-03).
+# Debogage sans fil coupe, adb garde l'appareil « device » mais chaque
+# commande pend, et le rapport qui l'appelle garde son verrou : les appuis
+# de USER sont ignores. Une sonde de 4 s, memorisee 20 s, tranche. Les flux
+# longs (getevent, logcat, screenrecord) ne sont ni sondes ni bornes.
+age() { echo $(( $(date +%s) - $(stat -c %Y "$1" 2>/dev/null || echo 0) )); }
+sonder() {
+  local c="" v
+  [ "$1" = -s ] && { c="$2"; shift 2; }
+  v="$1"
+  case "$v" in shell|push|pull|install|install-multiple|uninstall) ;; *) return 0 ;; esac
+  case "$*" in *getevent*|*logcat*|*screenrecord*) return 0 ;; esac
+  [ -n "$c" ] || c="${ANDROID_SERIAL:-}"
+  [ -n "$c" ] || return 0
+  if [ "$(age /tmp/adb-pixel-injoignable)" -lt 20 ]; then
+    echo "adb-garde : Pixel injoignable (debogage sans fil coupe ?), commande abandonnee." >&2; exit 1
+  fi
+  if [ "$(age /tmp/adb-pixel-joignable)" -ge 20 ]; then
+    if timeout 10 "$REEL" -s "$c" shell true >/dev/null 2>&1; then
+      touch /tmp/adb-pixel-joignable; rm -f /tmp/adb-pixel-injoignable
+    else
+      touch /tmp/adb-pixel-injoignable
+      echo "adb-garde : Pixel injoignable (debogage sans fil coupe ?), commande abandonnee." >&2; exit 1
+    fi
+  fi
+  # Joignable il y a moins de 20 s, mais il peut tomber en route.
+  case "$v" in shell) [ -z "$REEL_BORNE" ] && REEL_BORNE="timeout 60" ;; push|pull) [ -z "$REEL_BORNE" ] && REEL_BORNE="timeout 120" ;; esac
+  return 0
+}
+
+# Le garde lui-meme, et lui seul, passe outre : c'est lui qui ecoute le
+# doigt de USER et qui obeit a son bouton. S'il etait bloque, plus personne
+# ne pourrait entendre REPRENDRE.
+[ -n "$PIXEL_GARDE" ] && { relayer "$@"; sonder "$@"; exec $REEL_BORNE "$REEL" "$@"; }
+
+# Commandes de service : jamais bloquees, sinon le serveur adb ne demarre plus
+# et meme la levee du verrou devient impossible.
+case "$1" in
+  start-server|kill-server|fork-server|server|devices|connect|disconnect|\
+version|help|--version|"") exec "$REEL" "$@" ;;
+esac
+
+# Les autres telephones (A07 de EntrepriseA, 23/09/2026) : le verrou et la main
+# de USER concernent le seul Pixel. USER l'a dit en clair : « je te parle d'un
+# autre telephone ». `pair` n'atteint aucun appareil deja connu, il passe.
+# Un appareil hors Pixel se declare dans HORS_PIXEL, une adresse IP par ligne,
+# et s'appelle toujours avec `-s <serie>` : sans `-s`, le Pixel reste vise.
+HORS_PIXEL=${ADB_HORS_PIXEL:-$HOME/Bureau/Projets/contexte/bin/pixel/hors-pixel.txt}
+[ "$1" = pair ] && exec "$REEL" "$@"
+cible="${ANDROID_SERIAL:-}"
+[ "$1" = -s ] && cible="$2"
+
+# ------------------------- 0. le pilotage passe avant les taches de fond
+# POURQUOI (2026-10-05) : la veille LINE (toutes les 5 min) allumait l'ecran
+# de l'A07 au milieu des automatisations que USER lancait. Les deux se
+# marchaient dessus. Regle, pour TOUS les telephones :
+#   - pilote (terminal, agent Hermes, CLI du proxy) : chaque appel marque
+#     l'appareil occupe pendant 10 min, et attend qu'une tache de fond en
+#     cours ait fini (90 s max) ;
+#   - fond (unite qui a un .timer, ou ADB_FOND=1 pose par `tache-fond`) :
+#     ses commandes qui modifient le telephone sont refusees (code 75)
+#     tant qu'un pilote est actif. Les lectures passent.
+#   - neutre (autres services, ex. relais) : rien ne change.
+# Une tache planifiee future est donc protegee sans rien declarer : son
+# .timer suffit a la classer en fond.
+PRIORITE=${ADB_PRIORITE:-/tmp/adb-priorite}
+BAIL=${ADB_BAIL:-600}
+appareil=pixel
+if [ -n "$cible" ] && [ -r "$HORS_PIXEL" ]; then
+  while read -r ip nom _; do
+    case "$ip" in ''|'#'*) continue ;; esac
+    case "$cible" in "$ip"|"$ip":*) appareil="${nom:-$ip}"; break ;; esac
+  done < "$HORS_PIXEL"
+fi
+# Seules les commandes qui modifient l'etat du telephone cedent le pas.
+# Lire (screencap, dumpsys, getprop) n'interfere avec rien.
+mutante=0
+case "$*" in
+  *" input "*|*"am start"*|*"am force-stop"*|*"am broadcast"*|*monkey*|\
+*"pm install"*|*"pm uninstall"*|*"settings put"*|*" svc "*|\
+*"cmd statusbar"*|*"wm "*)  mutante=1 ;;
+esac
+[ "$1" = install ] || [ "$1" = uninstall ] || [ "$1" = push ] && mutante=1
+# Exception (2026-10-01) : la voix du Creeper. Deposer un mp3 dans son dossier
+# et reveiller son service ne touche ni a l'ecran ni aux applis de USER : c'est
+# la reponse qu'il attend. Mesure le jour meme : deux reponses vocales ont
+# patiente 6 et 22 s parce qu'il tenait son telephone en parlant. L'arret
+# d'urgence, plus haut, reste respecte.
+case "$*" in
+  *"com.poste.pixel.VIBRE"*|*"com.poste.pixelgarde/.Voix"*|*"push "*"/com.poste.pixelgarde/files/voix/"*) mutante=0 ;;
+esac
+
+role=neutre
+if [ -n "$ADB_FOND" ]; then
+  role=fond
+elif [ -n "${ADB_CLASSE:-}${ADB_PROPRIO:-}" ]; then
+  role=pilote
+else
+  unite=$(sed -n 's#.*/\([^/]*\.service\)$#\1#p' /proc/$$/cgroup 2>/dev/null | tail -1)
+  if [ -z "$unite" ]; then
+    role=pilote
+  elif [ -e "${HOME:-$HOME}/.config/systemd/user/${unite%.service}.timer" ]; then
+    role=fond
+  else
+    case "$unite" in
+      hermes-gateway.service|claude-proxy.service|prime-telegram.service) role=pilote ;;
+    esac
+  fi
+fi
+mkdir -p "$PRIORITE" 2>/dev/null
+if [ "$role" = pilote ]; then
+  touch "$PRIORITE/main-$appareil"
+  if ! flock -n "$PRIORITE/fond-$appareil.lock" true 2>/dev/null; then
+    echo "adb-garde : une tache de fond finit sur $appareil, j'attends (90 s max)..." >&2
+    flock -w 90 "$PRIORITE/fond-$appareil.lock" true 2>/dev/null \
+      || echo "adb-garde : tache de fond toujours la apres 90 s, je passe." >&2
+  fi
+elif [ "$role" = fond ] && [ "$mutante" = 1 ]; then
+  m=$(stat -c %Y "$PRIORITE/main-$appareil" 2>/dev/null || echo 0)
+  if [ $(( $(date +%s) - m )) -lt "$BAIL" ]; then
+    printf '%s  REFUS-FOND %s pid=%s %s\n  >> adb %s\n' "$(date -Is)" "$appareil" "$PPID" \
+      "$(tr '\0' ' ' < /proc/$PPID/cmdline 2>/dev/null | cut -c1-140)" "$*" >> "$PRIORITE/journal.log"
+    echo "adb-garde : $appareil pilote en ce moment, tache de fond repoussee (ne pas contourner)." >&2
+    exit 75
+  fi
+fi
+
+# ------------------------- 0 bis. une seule main par telephone (2026-10-06)
+# Agent contre agent, agent contre lot : voir adb-main.sh. Le lot cede et
+# reprend seul, deux agents se suivent sans se couper.
+if [ "$role" = pilote ] && [ "$mutante" = 1 ]; then
+  ADB_MAIN=$(dirname "$(readlink -f "$0")")/adb-main.sh
+  [ -r "$ADB_MAIN" ] || ADB_MAIN=$HOME/Bureau/Projets/contexte/bin/pixel/adb-main.sh
+  . "$ADB_MAIN"
+  main_prendre "$appareil"
+fi
+
+if [ -n "$cible" ] && [ -r "$HORS_PIXEL" ]; then
+  while read -r ip _; do
+    case "$ip" in ''|'#'*) continue ;; esac
+    case "$cible" in "$ip"|"$ip":*|*"$ip"*) exec "$REEL" "$@" ;; esac
+  done < "$HORS_PIXEL"
+fi
+
+tracer() {
+  local qui=""
+  [ -r "/proc/$PPID/cmdline" ] && qui=$(tr '\0' ' ' < "/proc/$PPID/cmdline" | cut -c1-140)
+  printf '%s  %-6s pid=%s  %s\n  >> adb %s\n' \
+    "$(date -Is)" "$1" "$PPID" "$qui" "$*" >> "$JOURNAL" 2>/dev/null
+}
+
+# ---------------------------------------------------- 1. arret d'urgence
+if [ -e "$STOP" ]; then
+  tracer REFUS "$@"
+  cat >&2 <<'MSG'
+ADB REFUSE : arret d'urgence arme par USER depuis son telephone.
+
+Le Pixel lui appartient tant qu'il n'a pas appuye sur REPRENDRE.
+NE PAS contourner ce refus, NE PAS lever le verrou toi-meme :
+seul USER le leve, par la pastille ou en le demandant explicitement.
+MSG
+  exit 13
+fi
+
+# ------------------------------------- 2. sa main passe avant la mienne
+if [ "$mutante" = 1 ] && [ -e "$HUMAIN" ]; then
+  debut=$(date +%s) prevenu=0
+  while :; do
+    maintenant=$(date +%s)
+    touche=$(stat -c %Y "$HUMAIN" 2>/dev/null || echo 0)
+    [ $((maintenant - touche)) -ge "$SILENCE" ] && break
+    [ -e "$STOP" ] && { tracer REFUS "$@"; echo "arret d'urgence arme pendant l'attente." >&2; exit 13; }
+    if [ "$prevenu" = 0 ]; then
+      echo "adb-garde : USER a la main, j'attends qu'il ait fini..." >&2
+      tracer ATTENTE "$@"
+      prevenu=1
+    fi
+    [ $((maintenant - debut)) -gt "$ATTENTE_MAX" ] && {
+      echo "adb-garde : telephone occupe depuis ${ATTENTE_MAX}s, j'abandonne." >&2; exit 13; }
+    sleep 0.3
+  done
+  [ "$prevenu" = 1 ] && echo "adb-garde : calme revenu, je reprends." >&2
+fi
+
+relayer "$@"
+sonder "$@"
+exec $REEL_BORNE "$REEL" "$@"

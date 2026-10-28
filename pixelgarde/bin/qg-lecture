@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Qui a la parole sur le telephone : l'etat de lecture des rapports du QG.
+
+Revue du 2026-10-06 : cinq producteurs de voix (lecture auto, bouton Lire,
+reponse du standard, compte a rebours, differe) decidaient chacun de leur
+cote, sur des indices (/tmp/pixel-voix-choix, stabilite de la file, verrou
+tombe trop tot). Deux rapports se coupaient, un bouton visait le mauvais
+rapport, un compte a rebours etait recouvert. Un seul etat les met d'accord :
+
+  LIBRE           personne ne parle, la lecture auto peut partir
+  LECTURE(id)     le rapport id est en train d'etre lu
+  FENETRE(id)     il vient de finir : USER a regroupe_s pour toucher un bouton
+  TOUR(id)        un tour du standard tourne pour lui (sous=compte : un
+                  compte a rebours d'envoi est affiche)
+
+Le fichier tient une ligne JSON : {etat, id, depuis, sous, tete}. `tete` est
+la liste des rapports coupes en cours de lecture : ils repassent en premier.
+
+Chaque etat expire a la lecture, jamais par une minuterie : un telephone qui
+ne renvoie jamais rapportfini ne bloque pas la file plus de 4 min.
+
+  qg-lecture lire              l'etat en JSON
+  qg-lecture id                l'id courant, vide si LIBRE
+  qg-lecture poser ETAT [id] [sous]
+  qg-lecture tete ID           remet un rapport en tete de file
+  qg-lecture finir ETAT [sauf] LIBRE si l'etat est ETAT, sauf sous-etat `sauf`
+"""
+
+import json
+import os
+import sys
+import time
+
+PIXEL_TMP = os.environ.get("PIXEL_TMP", "/tmp")
+FICHIER = os.path.join(PIXEL_TMP, "qg-lecture.json")
+JOURNAL = os.path.expanduser("~/.hermes/logs/qg-lecture.log")
+ETATS = ("LIBRE", "LECTURE", "FENETRE", "TOUR")
+# Un rapport dure 20 s, 90 s au plus avec le detail. Au-dela de 4 min sans
+# rapportfini, le telephone l'a perdu (appli tuee, ecran coupe) : on rend la main.
+LECTURE_MAX_S = 240
+# Un tour du standard : transcription, appel, synthese, puis le compte a
+# rebours. 10 min couvrent le pire mesure (3 min) avec de la marge.
+TOUR_MAX_S = 600
+
+
+def regroupe_s():
+    """La fenetre apres un rapport, relue a chaque appel : les essais la changent."""
+    try:
+        with open(os.path.expanduser("~/.hermes/qg-config.json")) as f:
+            return float(json.load(f).get("regroupe_s", 8))
+    except Exception:
+        return 8.0
+
+
+def journal(texte):
+    try:
+        os.makedirs(os.path.dirname(JOURNAL), exist_ok=True)
+        with open(JOURNAL, "a", encoding="utf-8") as f:
+            f.write("{} {}\n".format(time.strftime("%F %T"), texte))
+    except OSError:
+        pass
+
+
+def _brut():
+    try:
+        with open(FICHIER, encoding="utf-8") as f:
+            d = json.load(f)
+        if d.get("etat") in ETATS:
+            return d
+    except Exception:
+        pass
+    return {"etat": "LIBRE", "id": "", "depuis": 0, "sous": "", "tete": []}
+
+
+def _ecrire(d):
+    """Ecriture atomique : le garde et les scripts lisent le fichier a tout moment."""
+    os.makedirs(PIXEL_TMP, exist_ok=True)
+    tmp = "{}.{}".format(FICHIER, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f)
+    os.replace(tmp, FICHIER)
+
+
+def lire():
+    """L'etat courant, perimes deja ramenes a LIBRE."""
+    d = _brut()
+    d.setdefault("tete", [])
+    age = time.time() - float(d.get("depuis") or 0)
+    limite = {"LECTURE": LECTURE_MAX_S, "FENETRE": regroupe_s(),
+              "TOUR": TOUR_MAX_S}.get(d["etat"])
+    if limite is not None and age > limite:
+        if d["etat"] != "FENETRE":
+            journal("{}({}) expire apres {:.0f} s, LIBRE".format(d["etat"], d.get("id"), age))
+        d.update(etat="LIBRE", id="", sous="", depuis=time.time())
+        try:
+            _ecrire(d)
+        except OSError:
+            pass
+    return d
+
+
+def poser(etat, ident="", sous=""):
+    etat = etat.upper()
+    if etat not in ETATS:
+        raise ValueError("etat inconnu : " + etat)
+    d = _brut()
+    avant = "{}({})".format(d["etat"], d.get("id", ""))
+    if etat == "LIBRE":
+        ident, sous = "", ""
+    d.update(etat=etat, id=str(ident or ""), sous=sous or "", depuis=time.time())
+    d.setdefault("tete", [])
+    # Un rapport qu'on lit n'attend plus en tete.
+    if etat == "LECTURE" and d["id"] in d["tete"]:
+        d["tete"].remove(d["id"])
+    _ecrire(d)
+    journal("{} -> {}({}){}".format(avant, etat, d["id"], " " + sous if sous else ""))
+    return d
+
+
+def tete_poser(ident):
+    d = _brut()
+    t = [x for x in d.get("tete", []) if x != str(ident)]
+    d["tete"] = [str(ident)] + t
+    _ecrire(d)
+    journal("{} remis en tete de file".format(ident))
+    return d
+
+
+def tete_lire():
+    return list(_brut().get("tete", []))
+
+
+def tete_retirer(ident):
+    d = _brut()
+    if str(ident) in d.get("tete", []):
+        d["tete"].remove(str(ident))
+        _ecrire(d)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "lire":
+        print(json.dumps(lire(), ensure_ascii=False))
+    elif a[0] == "id":
+        print(lire().get("id", ""))
+    elif a[0] == "etat":
+        print(lire()["etat"])
+    elif a[0] == "poser" and len(a) >= 2:
+        try:
+            poser(a[1], a[2] if len(a) > 2 else "", a[3] if len(a) > 3 else "")
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 2
+    elif a[0] == "tete" and len(a) == 2:
+        tete_poser(a[1])
+    elif a[0] == "finir" and len(a) >= 2:
+        # Les scripts voix rendent la main sans savoir qui l'a prise : un
+        # voixpret ne libere qu'un TOUR, jamais une LECTURE en cours, et pas
+        # un TOUR dont le compte a rebours est encore affiche.
+        d = lire()
+        if d["etat"] == a[1].upper() and not (len(a) > 2 and d.get("sous") == a[2]):
+            poser("LIBRE")
+    else:
+        print(__doc__, file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,26 @@
+  lock_sain() {
+    local ko=0
+    if [ ! -f pnpm-lock.yaml ]; then
+      echo "  pnpm-lock.yaml absent : l'installation n'est pas reproductible."
+      echo "  Remède : pnpm install, puis commiter le lock."
+      ko=1
+    elif ! git ls-files --error-unmatch pnpm-lock.yaml >/dev/null 2>&1; then
+      echo "  pnpm-lock.yaml n'est pas suivi par git : il ne fige rien pour personne d'autre."
+      echo "  Remède : git add pnpm-lock.yaml"
+      ko=1
+    fi
+    if [ -f package-lock.json ] || [ -f yarn.lock ]; then
+      echo "  Un lock étranger coexiste : deux arbres de dépendances possibles."
+      echo "  Remède : supprimer package-lock.json / yarn.lock, ce projet est en pnpm."
+      ko=1
+    fi
+    return "$ko"
+  }
+  etape "Lock unique et commité" lock_sain
+
+  # --frozen-lockfile refuse de MODIFIER le lock : si package.json a bougé sans
+  # que le lock suive, ça échoue au lieu de résoudre en silence.
+  if [ "$CIBLE" != "--fast" ]; then
+    etape "Lock gelé (pnpm)"          pnpm install --frozen-lockfile --dry-run
+    avertir "Audit dépendances (réseau)" pnpm audit --audit-level high
+  fi

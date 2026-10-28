@@ -1,0 +1,12 @@
+{
+  "accroche": "Doc, spec, proposition, RFC : rédiger à deux, par étapes.",
+  "fait": "Guide la rédaction d'un document structuré en 3 étapes : rassembler le contexte, structurer et affiner chaque section, puis tester la lecture avec un Claude neuf sans contexte.",
+  "pas_pour": "Pas pour rédiger un mail à un tiers (voir mail-redaction), ni pour créer une skill (voir fabrique-skill).",
+  "quand": "USER dit « écris un doc », « prépare une proposition », « rédige une spec », « un PRD », « un decision doc ». Aussi quand une rédaction longue et structurée démarre, même sans le mot doc.",
+  "motifs": [
+    "\\b(prd|rfc|decision doc|design doc)\\b",
+    "\\b(r[ée]dige|[ée]cris|pr[ée]pare)\\b.{0,12}\\b(une? )?(spec|proposition|doc)\\b"
+  ],
+  "origine_sha": "acb28e198424110b",
+  "date": "2026-10-25"
+}

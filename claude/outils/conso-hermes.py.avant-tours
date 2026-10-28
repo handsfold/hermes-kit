@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""Consommation reelle d'Hermes en tokens, appel par appel, par topic, cron et skill.
+
+Source : ~/.hermes/proxy-usage.jsonl, ecrit par claude-proxy a chaque appel du
+CLI (evenement `result` : `usage` reel, pas d'estimation). Les tokens sont
+ceux de l'appel seul, verifies le 2026-10-03 contre le journal du CLI.
+Aucun dollar ici : USER suit son quota en tokens (decision du 2026-10-03).
+Les crons sont nommes en croisant l'heure de l'appel avec
+~/.hermes/cron/executions.db et ~/.hermes/cron/jobs.json.
+
+Usage : conso-hermes.py [jours] [--topic N]
+  jours      periode analysee (defaut 7)
+  --topic N  detail des 15 appels les plus lourds d'un topic
+"""
+import json
+import sqlite3
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+H = Path.home() / ".hermes"
+JOURNAL = H / "proxy-usage.jsonl"
+NOMS = H / "qg-noms.json"
+JOBS = H / "cron" / "jobs.json"
+EXECS = H / "cron" / "executions.db"
+
+POSTES = ("cache_lu", "cache_ecrit", "entree", "sortie")
+# Au-dela de cette part de cache ecrit, l'appel a reconstruit son contexte :
+# cache expire, prompt systeme change ou session neuve.
+SEUIL_FROID = 0.5
+
+
+def lire_args():
+    jours, topic = 7, None
+    a = sys.argv[1:]
+    i = 0
+    while i < len(a):
+        if a[i] == "--topic" and i + 1 < len(a):
+            topic = a[i + 1]
+            i += 2
+        elif a[i].isdigit():
+            jours = int(a[i])
+            i += 1
+        else:
+            sys.exit(__doc__)
+    return jours, topic
+
+
+def quand(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def charger(jours):
+    if not JOURNAL.exists():
+        sys.exit(f"Aucun journal : {JOURNAL} (proxy pas encore relance avec l'enregistrement ?)")
+    debut = datetime.now(timezone.utc) - timedelta(days=jours)
+    lignes = []
+    for brut in JOURNAL.read_text(encoding="utf-8").splitlines():
+        try:
+            l = json.loads(brut)
+        except ValueError:
+            continue
+        if quand(l["ts"]) >= debut:
+            lignes.append(l)
+    return lignes
+
+
+def noms_topics():
+    try:
+        return json.loads(NOMS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def fenetres_cron():
+    """[(debut, fin, nom du job, skills)] des executions de cron connues."""
+    try:
+        d = json.loads(JOBS.read_text(encoding="utf-8"))
+        jobs = {j["id"]: j for j in (d["jobs"] if isinstance(d, dict) else d)}
+    except (OSError, ValueError, KeyError):
+        jobs = {}
+    if not EXECS.exists():
+        return []
+    con = sqlite3.connect(f"file:{EXECS}?mode=ro", uri=True)
+    out = []
+    for job_id, deb, fin in con.execute(
+            "select job_id, started_at, finished_at from executions where started_at is not null"):
+        j = jobs.get(job_id, {})
+        skills = list(j.get("skills") or []) + ([j["skill"]] if j.get("skill") else [])
+        fin_dt = quand(fin) if fin else datetime.now(timezone.utc)
+        out.append((quand(deb), fin_dt, j.get("name") or job_id, skills))
+    con.close()
+    return out
+
+
+def nommer_cron(l, fenetres):
+    t = quand(l["ts"])
+    cands = [f for f in fenetres if f[0] - timedelta(seconds=5) <= t <= f[1] + timedelta(seconds=5)]
+    if len(cands) == 1:
+        return cands[0][2], cands[0][3]
+    if cands:
+        return "cron ambigu (" + ", ".join(sorted({c[2] for c in cands})) + ")", []
+    return "cron inconnu", []
+
+
+
+def contexte(l):
+    return l["entree"] + l["cache_lu"] + l["cache_ecrit"]
+
+
+def total(l):
+    return contexte(l) + l["sortie"]
+
+
+def froid(l):
+    c = contexte(l)
+    return c > 0 and l["cache_ecrit"] / c > SEUIL_FROID
+
+
+class Cumul:
+    def __init__(self):
+        self.n = 0
+        self.tok = defaultdict(float)
+        self.froids = 0
+        self.tok_froid = 0.0
+        self.sys = set()
+
+    @property
+    def total(self):
+        return sum(self.tok[p] for p in POSTES)
+
+    def ajoute(self, l, part=1.0):
+        self.n += 1
+        for p in POSTES:
+            self.tok[p] += l[p] * part
+        if froid(l):
+            self.froids += 1
+            self.tok_froid += total(l) * part
+        if l.get("sys_tout"):
+            self.sys.add(l["sys_tout"])
+
+
+def k(n):
+    n = int(n)
+    if n >= 1_000_000:
+        return f"{n / 1e6:,.1f}M".replace(",", " ").replace(".", ",")
+    return f"{n / 1000:,.0f}k".replace(",", " ") if n >= 1000 else str(n)
+
+
+def tableau(titre, cumuls, tout, limite=15, colonne="Nom"):
+    print(f"\n## {titre}\n")
+    print(f"{colonne:<30} {'appels':>6} {'tokens':>8} {'part':>6} {'ctx moy':>8} "
+          f"{'ecrit':>7} {'sortie':>7} {'froids':>6}")
+    for nom, c in sorted(cumuls.items(), key=lambda x: -x[1].total)[:limite]:
+        ctx = (c.tok["entree"] + c.tok["cache_lu"] + c.tok["cache_ecrit"]) / max(c.n, 1)
+        part = 100 * c.total / tout if tout else 0
+        print(f"{str(nom)[:30]:<30} {c.n:>6} {k(c.total):>8} {part:>5.1f}% {k(ctx):>8} "
+              f"{k(c.tok['cache_ecrit']):>7} {k(c.tok['sortie']):>7} {c.froids:>6}")
+    reste = len(cumuls) - limite
+    if reste > 0:
+        print(f"... et {reste} autres")
+
+
+def main():
+    jours, topic_detail = lire_args()
+    lignes = charger(jours)
+    if not lignes:
+        sys.exit(f"Aucun appel sur {jours} j dans {JOURNAL}.")
+    noms = noms_topics()
+    fen = fenetres_cron()
+
+    tot = Cumul()
+    par_source, par_topic, par_cron = defaultdict(Cumul), defaultdict(Cumul), defaultdict(Cumul)
+    par_skill, par_modele = defaultdict(Cumul), defaultdict(Cumul)
+    outils = defaultdict(int)
+    par_jour = defaultdict(Cumul)
+
+    for l in lignes:
+        tot.ajoute(l)
+        par_source[l["source"]].ajoute(l)
+        par_modele[f"{l.get('modele') or 'defaut'}/{l.get('effort') or 'defaut'}"].ajoute(l)
+        par_jour[l["ts"][:10]].ajoute(l)
+        for o, n in (l.get("outils") or {}).items():
+            outils[o] += n
+        skills = dict(l.get("skills") or {})
+        if l["source"] == "cron":
+            nom, sk = nommer_cron(l, fen)
+            par_cron[nom].ajoute(l)
+            for s in sk:
+                skills.setdefault(s, 1)
+        elif l.get("topic"):
+            par_topic[f"{noms.get(l['topic'], '?')} ({l['topic']})"].ajoute(l)
+        # Un appel qui charge 2 skills compte pour moitie dans chacune.
+        for s in skills:
+            par_skill[s].ajoute(l, 1 / len(skills))
+
+    debut = min(l["ts"] for l in lignes)[:16].replace("T", " ")
+    print(f"# Consommation reelle d'Hermes en tokens · {jours} j · {len(lignes)} appels depuis {debut} UTC\n")
+    print(f"Total : {k(tot.total)} tokens  ·  moyenne {k(tot.total / len(lignes))} par appel")
+
+    print("\nRepartition :")
+    for p in POSTES:
+        print(f"  {p:<12} {k(tot.tok[p]):>8}  {100 * tot.tok[p] / (tot.total or 1):>5.1f}%")
+    print(f"\nAppels a cache froid (> {int(SEUIL_FROID * 100)} % du contexte reecrit) : "
+          f"{tot.froids} sur {tot.n}, {k(tot.tok_froid)} tokens")
+
+    tableau("Par source", par_source, tot.total, colonne="Source")
+    tableau("Par topic", par_topic, tot.total, colonne="Topic")
+    if par_cron:
+        tableau("Par cron", par_cron, tot.total, colonne="Cron")
+    if par_skill:
+        tableau("Par skill (appels qui l'ont chargee)", par_skill, tot.total, colonne="Skill")
+    tableau("Par modele / effort", par_modele, tot.total, colonne="Modele")
+
+    print("\n## Outils les plus appeles\n")
+    print("  " + "  ·  ".join(f"{o} {n}" for o, n in sorted(outils.items(), key=lambda x: -x[1])[:12]))
+
+    print("\n## Par jour\n")
+    for j in sorted(par_jour):
+        c = par_jour[j]
+        print(f"  {j}  {k(c.total):>8} tokens  {c.n:>5} appels  sortie {k(c.tok['sortie'])}")
+
+    instables = [(n, len(c.sys)) for n, c in par_topic.items() if len(c.sys) > max(3, c.n // 2)]
+    if instables:
+        print("\n## Prompt systeme instable (casse le cache a chaque tour)\n")
+        for n, v in sorted(instables, key=lambda x: -x[1]):
+            print(f"  {n} : {v} versions differentes")
+
+    if topic_detail:
+        print(f"\n## Topic {topic_detail} : les 15 appels les plus lourds\n")
+        sel = [l for l in lignes if l.get("topic") == topic_detail]
+        for l in sorted(sel, key=lambda x: -total(x))[:15]:
+            print(f"  {l['ts'][5:16]} {k(total(l)):>7} ctx {k(contexte(l)):>6} "
+                  f"ecrit {k(l['cache_ecrit']):>5} sortie {k(l['sortie']):>5} "
+                  f"{'froid ' if froid(l) else ''}{l.get('modele', '')} {l.get('effort', '')}")
+
+
+if __name__ == "__main__":
+    main()

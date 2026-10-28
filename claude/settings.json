@@ -1,0 +1,873 @@
+{
+  "cleanupPeriodDays": 99999,
+  "env": {
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "150000"
+  },
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "model": "opus",
+  "skillOverrides": {
+    "opencli-adapter-author": "off",
+    "find-skills": "off",
+    "opencli-usage": "off",
+    "opencli-autofix": "off",
+    "supabase-postgres-best-practices": "off",
+    "setup-gbrain": "off",
+    "sync-gbrain": "off",
+    "design-shotgun": "off",
+    "diagram": "off",
+    "ship": "off",
+    "smart-search": "off",
+    "document-generate": "off",
+    "plan-tune": "off",
+    "setup-browser-cookies": "off",
+    "open-gstack-browser": "off",
+    "skillify": "off",
+    "design-html": "off",
+    "unfreeze": "off",
+    "plan-design-review": "off",
+    "guard": "off",
+    "context-restore": "off",
+    "spec": "off",
+    "benchmark": "off",
+    "browse": "off",
+    "freeze": "off",
+    "landing-report": "off",
+    "investigate": "off",
+    "make-pdf": "off",
+    "plan-devex-review": "off",
+    "benchmark-models": "off",
+    "pair-agent": "off",
+    "setup-deploy": "off",
+    "careful": "off",
+    "document-release": "off",
+    "codex": "off",
+    "devex-review": "off",
+    "plan-ceo-review": "off",
+    "plan-eng-review": "off",
+    "land-and-deploy": "off",
+    "office-hours": "off",
+    "canary": "off",
+    "retro": "off",
+    "context-save": "off",
+    "cso": "off",
+    "scrape": "off",
+    "health": "off",
+    "qa-only": "off",
+    "learn": "off",
+    "babysit": "off",
+    "cloud-sync": "off",
+    "design-is": "off",
+    "do": "off",
+    "how-it-works": "off",
+    "knowledge-agent": "off",
+    "learn-codebase": "off",
+    "make-plan": "off",
+    "oh-my-issues": "off",
+    "pathfinder": "off",
+    "smart-explore": "off",
+    "standup": "off",
+    "timeline-report": "off",
+    "version-bump": "off",
+    "weekly-digests": "off",
+    "what-the": "off",
+    "wowerpoint": "off",
+    "quick": "off",
+    "token-coach": "off",
+    "token-dashboard": "off",
+    "token-optimizer": "off",
+    "_gstack-command": "off",
+    "autoplan": "off",
+    "connect-chrome": "off",
+    "design-consultation": "off",
+    "gstack-upgrade": "off",
+    "seo-pilote": "off",
+    "update-all-skills": "off",
+    "forget": "off",
+    "claude-hud:setup": "off",
+    "claude-hud:configure": "off",
+    "setup": "off",
+    "configure": "off",
+    "dataviz": "off",
+    "owasp-security": "off",
+    "switch-model": "off",
+    "keybindings-help": "off",
+    "workflow-authoring": "off",
+    "simplify": "off",
+    "schedule": "off",
+    "loop": "off",
+    "update-config": "off",
+    "claude-mem:babysit": "off",
+    "claude-mem:cloud-sync": "off",
+    "claude-mem:design-is": "off",
+    "claude-mem:do": "off",
+    "claude-mem:how-it-works": "off",
+    "claude-mem:knowledge-agent": "off",
+    "claude-mem:learn-codebase": "off",
+    "claude-mem:make-plan": "off",
+    "claude-mem:oh-my-issues": "off",
+    "claude-mem:pathfinder": "off",
+    "claude-mem:standup": "off",
+    "claude-mem:timeline-report": "off",
+    "claude-mem:version-bump": "off",
+    "claude-mem:weekly-digests": "off",
+    "claude-mem:what-the": "off",
+    "claude-mem:wowerpoint": "off",
+    "token-optimizer:health": "off",
+    "token-optimizer:quick": "off",
+    "token-optimizer:fleet-auditor": "off",
+    "token-optimizer:token-coach": "off",
+    "token-optimizer:token-dashboard": "off",
+    "frontend-design:frontend-design": "off",
+    "claude-mem:smart-explore": "off",
+    "token-optimizer:token-optimizer": "off",
+    "cloud-cost-guard": "off",
+    "hermes-telegram-topics": "off",
+    "patrimoine-thailande": "off",
+    "retro-agent": "off",
+    "parallel-scan-optimization": "off",
+    "omi-local": "off",
+    "bibliotheque": "off",
+    "pixel-pilotage": "off",
+    "tinder-agent": "off",
+    "wallet-entropy-audit": "off",
+    "android-device-control": "off",
+    "referencement-enseigne-thailande": "off",
+    "crawl4ai-scraper": "off",
+    "android-media3-auto": "off",
+    "chrome-forensics": "off",
+    "video-transcription": "off",
+    "bitcoin-address-datasets": "off",
+    "deal-hunting-phone": "off",
+    "agent-reach-hermes": "off"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$TOOL_INPUT\" | grep -qiE '\"command\"\\s*:\\s*\"(git (push|commit|add)|pnpm (run )?build|npm run build|npx next build)' && $HOME/.claude/hooks/build-lock.sh acquire || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PreToolUse",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v rtk >/dev/null 2>&1 && rtk hook claude || true"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/outil-existant.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/garde-gateway.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/agent-fond-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/portail-sonnet.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/carnet-site.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/commit-sans-attribution.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/envoi-sans-accord.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/attente-sans-fin.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/ouvert-ferme.py note"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/projet-sans-famille.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/projet-sans-socle.py"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PermissionRequest",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$TOOL_INPUT\" | grep -qiE '\"command\"\\s*:\\s*\"(git (push|commit|add)|pnpm (run )?build|npm run build|npx next build)' && $HOME/.claude/hooks/build-lock.sh release || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PostToolUse",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Skill|Read|skill_view",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/journal-skills.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/controle-video.py",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PostToolUseFailure",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/journal-skills.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "UserPromptSubmit",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || bash $HOME/.claude/hooks/cc-session-label.sh",
+            "timeout": 5000,
+            "statusMessage": "Nommage de la session",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/journal-skills.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 $HOME/.claude/hooks/skills-forcees.py",
+            "timeout": 5,
+            "statusMessage": "Skills a charger"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 $HOME/.claude/hooks/aiguilleur-cc.py",
+            "timeout": 20,
+            "statusMessage": "Choix de la skill"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || notify-send -i utilities-terminal 'Claude Code' 'En attente de ton input'"
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "Notification",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "Stop",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || bash $HOME/.claude/hooks/cc-rename-from-r.sh",
+            "timeout": 10000,
+            "statusMessage": "Nom d apres /r",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/fond-orphelin.py",
+            "timeout": 5,
+            "statusMessage": "Commandes en fond"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/promesse-sans-reveil.py",
+            "timeout": 5,
+            "statusMessage": "Promesses tenables"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/verif-avant-annonce.py",
+            "timeout": 5,
+            "statusMessage": "Annonce vérifiée"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/tiret-interdit.py",
+            "timeout": 5,
+            "statusMessage": "Tirets longs"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/emulateur-fin.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/ouvert-ferme.py ferme"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "SubagentStart",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "SubagentStop",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PreCompact",
+            "once": true,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PostCompact",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "SessionStart",
+            "once": true,
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || bash $HOME/.claude/hooks/cc-session-rearm.sh",
+            "timeout": 5000,
+            "statusMessage": "Réarmement du label",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/plugins-skills-off.py",
+            "timeout": 5000,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "SessionEnd",
+            "once": true,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 30000,
+            "statusMessage": "Setup",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "TeammateIdle",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "TaskCreated",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "TaskCompleted",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "ConfigChange",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "WorktreeCreate",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "WorktreeRemove",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "InstructionsLoaded",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Elicitation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "Elicitation",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "ElicitationResult": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "ElicitationResult",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "StopFailure",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "CwdChanged",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "matcher": ".envrc|.env|.env.local",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "FileChanged",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_TIMEOUT_MS\" ] || python3 $HOME/.claude/hooks/scripts/hooks.py",
+            "timeout": 5000,
+            "statusMessage": "PermissionDenied",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $HOME/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "github@claude-plugins-official": false,
+    "supabase@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": true,
+    "claude-mem@thedotmack": true,
+    "claude-hud@claude-hud": true,
+    "posthog@claude-plugins-official": false,
+    "vercel@claude-plugins-official": false,
+    "marketing-skills@marketingskills": false,
+    "claude-seo@agricidaniel-seo": false,
+    "digital-marketing-pro@local-marketing": false,
+    "context7@claude-plugins-official": false,
+    "svg-logo-designer@rknall-custom-skills": false,
+    "token-optimizer@alexgreensh-token-optimizer": true,
+    "you-should-know@builtin": true,
+    "hawk-seo@hawk-seo": false
+  },
+  "extraKnownMarketplaces": {
+    "supermemory-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "supermemoryai/claude-supermemory"
+      }
+    },
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
+      }
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    },
+    "marketingskills": {
+      "source": {
+        "source": "github",
+        "repo": "coreyhaines31/marketingskills"
+      }
+    },
+    "agricidaniel-seo": {
+      "source": {
+        "source": "github",
+        "repo": "AgriciDaniel/claude-seo"
+      }
+    },
+    "rknall-custom-skills": {
+      "source": {
+        "source": "github",
+        "repo": "rknall/claude-skills"
+      }
+    },
+    "alexgreensh-token-optimizer": {
+      "source": {
+        "source": "github",
+        "repo": "alexgreensh/token-optimizer"
+      }
+    },
+    "hawk-seo": {
+      "source": {
+        "source": "directory",
+        "path": "$HOME/Bureau/Projets/perso/outils/hawk-seo"
+      }
+    }
+  },
+  "outputStyle": "Clair",
+  "language": "French",
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-4-8": {
+      "effortLevel": "xhigh"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "xhigh"
+    }
+  },
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "verbose": false,
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "allow": [
+      "$defaults"
+    ],
+    "soft_deny": [
+      "$defaults"
+    ]
+  },
+  "voiceEnabled": true
+}

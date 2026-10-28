@@ -1,0 +1,144 @@
+name: installation
+on:
+  push:
+    # Seules les branches de synchro (outils/synchroniser.sh) : master n'avance
+    # qu'apres un vert ici, et son push ne relance pas ce test (minutes macOS).
+    branches: ['sync/**']
+  workflow_dispatch:
+
+# Les minutes macOS comptent 10 fois, Windows 2 fois (quota de 2 000 min/mois du compte).
+# Ubuntu tourne sur l'executeur maison (0 minute facturee), dans un conteneur
+# jetable : install.sh ne touche jamais le home de la machine hote. macOS et Windows ne tournent que
+# si l'installateur change, ou sur workflow_dispatch. Ne 2026-10-26 : 90 % du quota consomme.
+# Un nouveau push annule le run en cours.
+concurrency:
+  group: installation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HK_PRENOM: Test
+  HK_TELEGRAM_TOKEN: "123456:TEST"
+  HK_TELEGRAM_USER: "42"
+  HK_CI: "1"
+  HK_AUTOJB: "non"
+  HK_SANS_TERMINAL: "1"
+  HK_SANS_CLAUDE_LOGIN: "1"
+  HK_SANS_PLUGINS: "1"
+  HK_SANS_SERVICES: "1"
+  HK_NODE_DEPS_TIMEOUT: "300"
+
+jobs:
+  # Ce qui a change depuis master : decide si macOS et Windows doivent tourner.
+  changements:
+    runs-on: [self-hosted, hk-local]
+    outputs:
+      os: ${{ steps.diff.outputs.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, submodules: false }
+      - id: diff
+        run: |
+          git fetch -q origin master
+          liste=$(git diff --name-only origin/master...HEAD)
+          echo "$liste"
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || \
+             echo "$liste" | grep -qE '^(install/|hermes_kit/|MANIFESTE\.txt$|pyproject\.toml$|uv\.lock$|\.github/workflows/installation\.yml$)'; then
+            echo "os=oui" >> "$GITHUB_OUTPUT"
+          else
+            echo "os=non" >> "$GITHUB_OUTPUT"
+          fi
+
+  ubuntu:
+    runs-on: [self-hosted, hk-local]
+    container: ubuntu:24.04
+    timeout-minutes: 40
+    steps:
+      - name: preparation du conteneur
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq >/dev/null && apt-get install -y -qq sudo git ca-certificates >/dev/null
+          useradd -m -s /bin/bash runner && echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
+      - uses: actions/checkout@v4
+        with: { submodules: false }
+      - name: install.sh
+        timeout-minutes: 25
+        run: |
+          cp -r "$GITHUB_WORKSPACE" /home/runner/hermes-kit && chown -R runner: /home/runner/hermes-kit
+          cd /home/runner/hermes-kit
+          sudo -E -H -u runner bash -c 'set +e; bash install/install.sh; echo $? > /home/runner/hk-rc'
+          echo "HK_RC=$(cat /home/runner/hk-rc)" >> "$GITHUB_ENV"
+      - name: verification
+        run: cd /home/runner/hermes-kit && sudo -E -H -u runner bash install/ci-verifier.sh
+      - name: journal
+        if: failure()
+        run: cp /tmp/hermes-kit-install.log "$GITHUB_WORKSPACE/journal-ubuntu.log" 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: journal-ubuntu, path: journal-ubuntu.log, if-no-files-found: ignore }
+      # Le conteneur ecrit en root dans le dossier de travail de l hote : on le rend a son
+      # proprietaire, sinon le checkout suivant (hors conteneur) echoue.
+      - name: rendre le dossier de travail
+        if: always()
+        run: chown -R "$(stat -c %u:%g /__w)" "$GITHUB_WORKSPACE"
+
+  macos:
+    needs: changements
+    if: needs.changements.outputs.os == 'oui'
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: false }
+      - name: install.sh
+        timeout-minutes: 25
+        run: |
+          set +e
+          bash install/install.sh; rc=$?
+          echo "HK_RC=$rc" >> "$GITHUB_ENV"
+          exit 0
+      - name: verification
+        run: bash install/ci-verifier.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: journal-macos, path: "${{ runner.temp }}/hermes-kit-install.log", if-no-files-found: ignore }
+
+  windows-wsl:
+    needs: changements
+    if: needs.changements.outputs.os == 'oui'
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    env:
+      # Sans WSLENV, Windows ne transmet aucune variable a WSL.
+      WSLENV: HK_PRENOM:HK_TELEGRAM_TOKEN:HK_TELEGRAM_USER:HK_SANS_CLAUDE_LOGIN:HK_SANS_PLUGINS:HK_SANS_SERVICES:HK_NODE_DEPS_TIMEOUT:HK_CI:HK_AUTOJB:HK_SANS_TERMINAL:GITHUB_ACTIONS:GITHUB_WORKSPACE/p
+    steps:
+      - name: pas de conversion CRLF
+        run: git config --global core.autocrlf false
+        shell: pwsh
+      - uses: actions/checkout@v4
+        with: { submodules: false }
+      - uses: Vampire/setup-wsl@v7
+        with:
+          distribution: Ubuntu-24.04
+          additional-packages: git curl python3 python3-venv jq ca-certificates
+      - name: depot dans WSL
+        run: mkdir -p ~/hermes-kit && cp -r . ~/hermes-kit
+      - name: install.sh
+        timeout-minutes: 25
+        run: |
+          set +e
+          cd ~/hermes-kit
+          timeout 12m bash install/install.sh; rc=$?
+          echo "$rc" > ~/hk-rc
+          exit 0
+      - name: verification
+        run: cd ~/hermes-kit && HK_RC=$(cat ~/hk-rc) bash install/ci-verifier.sh
+      - name: journal
+        if: failure()
+        run: cp /tmp/hermes-kit-install.log "$GITHUB_WORKSPACE/journal-wsl.log" 2>/dev/null || true
+        shell: wsl-bash {0}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: journal-windows-wsl, path: journal-wsl.log, if-no-files-found: ignore }

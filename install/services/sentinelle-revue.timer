@@ -1,0 +1,9 @@
+[Unit]
+Description=Sentinelle des systemes de revue, 9 h chaque jour
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

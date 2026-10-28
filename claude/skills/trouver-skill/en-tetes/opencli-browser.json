@@ -1,0 +1,15 @@
+{
+  "accroche": "Chrome, mon navigateur, opencli : piloter une page.",
+  "fait": "Pilote une vraie fenêtre Chrome avec opencli : lit une page, remplit des formulaires, clique dans un compte connecté, extrait des données, capture le réseau. Contrat de cible par sélecteur, champs composés, références périmées.",
+  "pas_pour": "Pas pour écrire un adaptateur (voir opencli-adapter-author), ni pour les règles de USER sur ses comptes (voir opencli-browser-poste).",
+  "quand": "USER dit « avec opencli », « sur mon navigateur », « ma page ouverte », « regarde cette page », « essaye sur seller central », « un exemple sur Internet avec opencli ». Aussi pour remplir un formulaire ou agir dans un compte connecté, dans le Chrome de USER. Se charge avec opencli-browser-poste.",
+  "motifs": [
+    "\\bopencli\\b",
+    "mon navigateur",
+    "ma page",
+    "page ouverte",
+    "seller central"
+  ],
+  "origine_sha": "16abee7e4f30dad3",
+  "date": "2026-10-28"
+}

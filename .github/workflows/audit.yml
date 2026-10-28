@@ -1,0 +1,18 @@
+name: audit
+on: [push, pull_request]
+jobs:
+  audit:
+    # Executeur maison : 0 minute facturee (ne 2026-10-26, quota a 90 %).
+    runs-on: [self-hosted, hk-local]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, submodules: false }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: identites privees
+        env:
+          HK_IDENTITES_REGEX: ${{ secrets.HK_IDENTITES_REGEX }}
+        run: |
+          test -n "$HK_IDENTITES_REGEX" || { echo "secret HK_IDENTITES_REGEX absent"; exit 1; }
+          python3 hermes_kit/audit.py

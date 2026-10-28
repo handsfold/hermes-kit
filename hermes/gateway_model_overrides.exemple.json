@@ -1,0 +1,16 @@
+{
+  "agent:main:telegram:dm:__QG_CHAT__:__QG_THREAD__": {
+    "model": "claude-opus-5-5",
+    "provider": "claude-proxy",
+    "api_key": "local",
+    "base_url": "http://localhost:8000",
+    "api_mode": "anthropic_messages"
+  },
+  "agent:main:telegram:dm:__QG_CHAT__:__COACH_THREAD__": {
+    "model": "claude-sonnet-5",
+    "provider": "claude-proxy",
+    "api_key": "local",
+    "base_url": "http://localhost:8000",
+    "api_mode": "anthropic_messages"
+  }
+}

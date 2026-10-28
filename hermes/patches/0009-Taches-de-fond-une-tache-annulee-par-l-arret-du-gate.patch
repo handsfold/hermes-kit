@@ -1,0 +1,53 @@
+From 3a01ad322bc6b6fa2ba7d87c3ae4be2b628f1d7f Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Taches de fond : une tache annulee par l'arret du gateway
+ previent l'utilisateur
+
+CancelledError n'herite pas d'Exception : sans ce bloc la tache disparaissait en
+silence. Message d'interruption envoye, puis re-leve. L'echec d'envoi de l'avis
+d'echec est journalise au lieu d'etre avale.
+
+Retouche: R10
+---
+ gateway/run_turn.py | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/gateway/run_turn.py b/gateway/run_turn.py
+index 2eff09243e..8fdedc04e8 100644
+--- a/gateway/run_turn.py
++++ b/gateway/run_turn.py
+@@ -2303,13 +2303,32 @@ class GatewayTurnMixin:
+                         )
+                         await sender(chat_id=source.chat_id, metadata=_thread_metadata, **{key: media_path})
+ 
++        except asyncio.CancelledError:
++            # Arret / redemarrage du gateway : la tache est annulee.
++            # CancelledError n'herite pas d'Exception : sans ce bloc, elle
++            # disparaissait en silence et l'utilisateur n'etait jamais prevenu.
++            logger.warning("Background task %s cancelled (gateway shutdown)", task_id)
++            try:
++                await adapter.send(
++                    chat_id=source.chat_id,
++                    content=(
++                        f"⚠️ Background task {task_id} interrompue "
++                        "par un redemarrage du gateway. Rien n'a ete livre."
++                    ),
++                    metadata=_thread_metadata,
++                )
++            except Exception:
++                logger.exception("Background task %s: cancel notice not sent", task_id)
++            raise
+         except Exception as e:
+             logger.exception("Background task %s failed", task_id)
+-            with suppress(Exception):
++            try:
+                 await adapter.send(
+                     chat_id=source.chat_id, content=f"❌ Background task {task_id} failed: {e}",
+                     metadata=_thread_metadata,
+                 )
++            except Exception:
++                logger.exception("Background task %s: failure notice not sent", task_id)
+ 
+     def _mcp_reload_refresh_cached_agents(self, multiplex: bool, profile) -> None:
+         """Refresh cached agents so existing sessions see new MCP tools on their next turn without

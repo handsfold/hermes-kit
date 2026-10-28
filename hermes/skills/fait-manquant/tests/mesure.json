@@ -1,0 +1,295 @@
+{
+ "date": "2026-10-25",
+ "modeles": {
+  "fort": "claude-sonnet-4-6-toolrelay",
+  "gratuit": "nvidia/nemotron-3.5-lightning:free"
+ },
+ "toolsets": [
+  "file",
+  "skills"
+ ],
+ "par_condition": {
+  "fort/sans": {
+   "n": 3,
+   "performance": 0.467,
+   "tokens": 9360,
+   "chargee": 0,
+   "erreurs": 0
+  },
+  "gratuit/avec": {
+   "n": 3,
+   "performance": 0.783,
+   "tokens": 25043,
+   "chargee": 0,
+   "erreurs": 0
+  },
+  "fort/avec": {
+   "n": 3,
+   "performance": 0.467,
+   "tokens": 9433,
+   "chargee": 0,
+   "erreurs": 0
+  },
+  "gratuit/sans": {
+   "n": 3,
+   "performance": 0.7,
+   "tokens": 47929,
+   "chargee": 0,
+   "erreurs": 0
+  },
+  "fort/forcee": {
+   "n": 3,
+   "performance": 0.633,
+   "tokens": 25022,
+   "chargee": 3,
+   "erreurs": 0
+  },
+  "gratuit/forcee": {
+   "n": 3,
+   "performance": 0.933,
+   "tokens": 42199,
+   "chargee": 3,
+   "erreurs": 0
+  },
+  "fort/aiguillee": {
+   "n": 3,
+   "performance": 0.667,
+   "tokens": 29321,
+   "chargee": 3,
+   "erreurs": 0
+  },
+  "gratuit/aiguillee": {
+   "n": 3,
+   "performance": 0.85,
+   "tokens": 59284,
+   "chargee": 3,
+   "erreurs": 0
+  }
+ },
+ "gain_contre_sans": {
+  "fort/avec": 0.0,
+  "fort/forcee": 0.166,
+  "fort/aiguillee": 0.2,
+  "gratuit/avec": 0.083,
+  "gratuit/forcee": 0.233,
+  "gratuit/aiguillee": 0.15
+ },
+ "runs": [
+  {
+   "tache": "fm-disque",
+   "modele": "fort",
+   "condition": "sans",
+   "performance": 0.5,
+   "tokens_total": 7454,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "fort",
+   "condition": "sans",
+   "performance": 0.4,
+   "tokens_total": 13502,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "gratuit",
+   "condition": "sans",
+   "performance": 0.75,
+   "tokens_total": 38782,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "fort",
+   "condition": "sans",
+   "performance": 0.5,
+   "tokens_total": 7124,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "gratuit",
+   "condition": "sans",
+   "performance": 0.6,
+   "tokens_total": 89331,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "gratuit",
+   "condition": "sans",
+   "performance": 0.75,
+   "tokens_total": 15673,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "fort",
+   "condition": "forcee",
+   "performance": 0.4,
+   "tokens_total": 33201,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "gratuit",
+   "condition": "forcee",
+   "performance": 1.0,
+   "tokens_total": 27086,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "fort",
+   "condition": "forcee",
+   "performance": 1.0,
+   "tokens_total": 25534,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "gratuit",
+   "condition": "forcee",
+   "performance": 0.8,
+   "tokens_total": 80725,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "gratuit",
+   "condition": "forcee",
+   "performance": 1.0,
+   "tokens_total": 18785,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "fort",
+   "condition": "forcee",
+   "performance": 0.5,
+   "tokens_total": 16331,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "fort",
+   "condition": "avec",
+   "performance": 0.5,
+   "tokens_total": 7504,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "gratuit",
+   "condition": "avec",
+   "performance": 0.75,
+   "tokens_total": 17738,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "fort",
+   "condition": "avec",
+   "performance": 0.4,
+   "tokens_total": 13564,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "fort",
+   "condition": "avec",
+   "performance": 0.5,
+   "tokens_total": 7231,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "gratuit",
+   "condition": "avec",
+   "performance": 1.0,
+   "tokens_total": 15549,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "gratuit",
+   "condition": "avec",
+   "performance": 0.6,
+   "tokens_total": 41842,
+   "skill_chargee": false,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "fort",
+   "condition": "aiguillee",
+   "performance": 1.0,
+   "tokens_total": 23450,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "gratuit",
+   "condition": "aiguillee",
+   "performance": 0.75,
+   "tokens_total": 53573,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-disque",
+   "modele": "fort",
+   "condition": "aiguillee",
+   "performance": 0.75,
+   "tokens_total": 23937,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "fort",
+   "condition": "aiguillee",
+   "performance": 0.25,
+   "tokens_total": 40577,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pret",
+   "modele": "gratuit",
+   "condition": "aiguillee",
+   "performance": 0.8,
+   "tokens_total": 62019,
+   "skill_chargee": true,
+   "erreur": null
+  },
+  {
+   "tache": "fm-pub",
+   "modele": "gratuit",
+   "condition": "aiguillee",
+   "performance": 1.0,
+   "tokens_total": 62261,
+   "skill_chargee": true,
+   "erreur": null
+  }
+ ]
+}

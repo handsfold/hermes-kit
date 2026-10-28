@@ -1,0 +1,39 @@
+From bcc18df0f8edcf79956fa18bbf604f07d84a2cd3 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] /stop (CLI) : arrete aussi les agents detaches lances par
+ agent-fond
+
+Les agents detaches tournent sous setsid, hors du registre Hermes ; /stop les
+laissait vivre. Appel de ~/bin/agent-fond stop --all quand il existe.
+
+Retouche: R13
+---
+ hermes_cli/cli_commands_mixin.py | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/hermes_cli/cli_commands_mixin.py b/hermes_cli/cli_commands_mixin.py
+index bca45fcf51..7bae59a673 100644
+--- a/hermes_cli/cli_commands_mixin.py
++++ b/hermes_cli/cli_commands_mixin.py
+@@ -899,6 +899,20 @@ class CLICommandsMixin:
+ 
+         See #14602.
+         """
++        # --- Local USER : les agents detaches (~/bin/agent-fond) tournent sous
++        # setsid, hors du registre Hermes. Sans cet appel, /stop les laissait
++        # vivre indefiniment. Voir contexte/methodes/agents-detaches.md.
++        import os as _os, subprocess as _sp
++        _af = _os.path.expanduser("~/bin/agent-fond")
++        if _os.path.exists(_af):
++            try:
++                _r = _sp.run([_af, "stop", "--all"], capture_output=True, text=True, timeout=20)
++                _last = (_r.stdout or "").strip().splitlines()
++                if _last and not _last[-1].startswith("0 "):
++                    print(f"  \u2705 agent-fond : {_last[-1]}")
++            except Exception as _e:  # noqa: BLE001
++                print(f"  agent-fond injoignable : {_e}")
++
+         from tools.process_registry import process_registry
+         running = [p for p in process_registry.list_sessions() if p.get("status") == "running"]
+         # Background subagents live in their own registry, not the process registry.

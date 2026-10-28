@@ -1,0 +1,580 @@
+From 20083d790da40a290de6b8c6b05071eb89486f89 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Messagerie : bus inter-topics, send_message(reveiller=true)
+ reveille la session cible
+
+gateway/bus.py garde une reference au gateway (register_gateway, appelee au
+demarrage) pour qu'un envoi vers un autre topic puisse declencher un tour de
+l'agent de ce topic au lieu d'un simple message. Parametre reveiller ajoute au
+schema de send_message. Tests du bus et du parametre.
+
+Retouche: R06
+---
+ gateway/bus.py                             | 224 +++++++++++++++++++++
+ gateway/run_startup.py                     |   7 +
+ tests/gateway/test_bus.py                  | 166 +++++++++++++++
+ tests/tools/test_send_message_reveiller.py |  86 ++++++++
+ tools/send_message_tool.py                 |  20 +-
+ 5 files changed, 502 insertions(+), 1 deletion(-)
+ create mode 100644 gateway/bus.py
+ create mode 100644 tests/gateway/test_bus.py
+ create mode 100644 tests/tools/test_send_message_reveiller.py
+
+diff --git a/gateway/bus.py b/gateway/bus.py
+new file mode 100644
+index 0000000000..5e6ed59572
+--- /dev/null
++++ b/gateway/bus.py
+@@ -0,0 +1,224 @@
++"""Bus inter-topics : reveiller la session d'un topic, pas seulement lui ecrire.
++
++`send_message` posait un message dans un topic et le miroitait en role
++`assistant`. L'agent d'en face ne se reveillait jamais : Telegram ne renvoie
++pas au bot ses propres messages, et le miroir se relisait comme sa propre
++parole passee, pas comme une demande.
++
++Ce module ferme la boucle. Il injecte un `MessageEvent(internal=True)` dans
++l'adaptateur de la plateforme cible, exactement comme le fait deja
++`_inject_watch_notification` pour les notifications de processus. Le gateway
++recalcule la session_key du topic, lance un vrai tour d'agent, et la reponse
++repart toute seule dans le bon sujet via `event.source`.
++
++Deux gardes, sans lesquelles le bus est une arme :
++
++- profondeur : un topic reveille peut a son tour en reveiller un autre, mais
++  pas indefiniment. Au-dela de PROFONDEUR_MAX, le reveil est refuse et
++  l'appelant recoit la raison.
++- auto-reveil : un topic ne peut pas se reveiller lui-meme, sinon un seul
++  appel suffit a boucler a l'infini.
++"""
++
++import asyncio
++import contextvars
++import logging
++import time
++from typing import Optional
++
++logger = logging.getLogger(__name__)
++
++PROFONDEUR_MAX = 2
++# Deux reveils du meme topic a moins de ce delai sont presque toujours un
++# emballement, pas une intention. Le second est refuse.
++COOLDOWN_S = 3.0
++# Plafond global, dernier rempart. La profondeur voyage par contextvar, et un
++# outil execute dans un thread d'executeur ne la voit pas toujours : sans ce
++# plafond, une chaine A -> B -> C -> A pourrait tourner sans fin.
++FENETRE_S = 60.0
++REVEILS_MAX_PAR_FENETRE = 8
++
++_PROFONDEUR: contextvars.ContextVar = contextvars.ContextVar("hermes_bus_profondeur", default=0)
++
++_gateway = None
++_derniers: dict = {}
++_horodatages: list = []
++
++PREAMBULE = (
++    "[Message relaye par le QG, pas ecrit par USER. Reponds ici normalement : "
++    "ta reponse arrive dans ton topic et le QG la verra.]"
++)
++
++
++def register_gateway(gw) -> None:
++    """Appele une fois au demarrage du gateway. Sans ca, le bus est inerte."""
++    global _gateway
++    _gateway = gw
++
++
++def gateway_disponible() -> bool:
++    return _gateway is not None
++
++
++def profondeur_courante() -> int:
++    try:
++        return int(_PROFONDEUR.get() or 0)
++    except Exception:
++        return 0
++
++
++def _cle_cible(platform_name: str, chat_id: str, thread_id) -> str:
++    return f"{platform_name}:{chat_id}:{thread_id or ''}"
++
++
++def _source_existante(platform_name: str, chat_id: str, thread_id):
++    """Reprend la SessionSource deja enregistree pour ce topic.
++
++    C'est la voie fidele : elle porte le vrai chat_type, le user_id et le nom
++    du salon. Reconstruire a la main devine, et une mauvaise devinette de
++    chat_type produit une autre session_key, donc un autre topic.
++    """
++    store = getattr(_gateway, "session_store", None)
++    if store is None:
++        return None
++    try:
++        entrees = store.list_sessions()
++    except Exception:
++        return None
++    voulu = str(thread_id) if thread_id else None
++    for entree in entrees:
++        origine = getattr(entree, "origin", None)
++        if origine is None:
++            continue
++        plate = getattr(origine, "platform", None)
++        plate = getattr(plate, "value", plate)
++        if str(plate).lower() != platform_name:
++            continue
++        if str(getattr(origine, "chat_id", "")) != str(chat_id):
++            continue
++        vu = getattr(origine, "thread_id", None)
++        vu = str(vu) if vu else None
++        if vu != voulu:
++            continue
++        return origine
++    return None
++
++
++def _source_construite(platform_name: str, chat_id: str, thread_id):
++    """Repli quand le topic n'a aucune session enregistree."""
++    if _gateway is None:
++        return None
++    try:
++        return _gateway._build_process_event_source({
++            "platform": platform_name,
++            "chat_id": str(chat_id),
++            # Un chat_id negatif est un groupe cote Telegram. Un topic sans
++            # groupe n'existe pas, d'ou le repli sur "group" des qu'un
++            # thread_id est present.
++            "chat_type": "group" if (str(chat_id).startswith("-") or thread_id) else "dm",
++            "thread_id": str(thread_id) if thread_id else None,
++        })
++    except Exception as exc:
++        logger.warning("bus: source construite impossible: %s", exc)
++        return None
++
++
++def _adaptateur(platform_name: str):
++    adapters = getattr(_gateway, "adapters", None) or {}
++    for cle, adapter in adapters.items():
++        valeur = getattr(cle, "value", cle)
++        if str(valeur).lower() == platform_name:
++            return adapter
++    return None
++
++
++def reveiller(platform_name: str, chat_id: str, thread_id, texte: str) -> dict:
++    """Injecte `texte` en role user dans la session du topic et lance un tour.
++
++    Retourne un dict {"reveille": bool, ...}. N'emet jamais d'exception :
++    l'envoi du message a deja reussi quand on arrive ici, et un echec de
++    reveil ne doit pas transformer un envoi reussi en erreur.
++    """
++    platform_name = (platform_name or "").strip().lower()
++    if _gateway is None:
++        return {"reveille": False, "raison": "gateway indisponible dans ce processus"}
++
++    profondeur = profondeur_courante()
++    if profondeur >= PROFONDEUR_MAX:
++        return {
++            "reveille": False,
++            "raison": f"profondeur maximale atteinte ({PROFONDEUR_MAX}) : chaine de reveils coupee",
++        }
++
++    adapter = _adaptateur(platform_name)
++    if adapter is None:
++        return {"reveille": False, "raison": f"aucun adaptateur actif pour {platform_name}"}
++
++    source = _source_existante(platform_name, chat_id, thread_id) or _source_construite(
++        platform_name, chat_id, thread_id
++    )
++    if source is None:
++        return {"reveille": False, "raison": "impossible de resoudre la session du topic"}
++
++    # Auto-reveil : la session cible est celle qui parle.
++    try:
++        from gateway.session_context import get_session_env
++        from gateway.session import build_session_key
++
++        cle_cible_session = build_session_key(source)
++        cle_courante = get_session_env("HERMES_SESSION_KEY", "")
++        if cle_courante and cle_courante == cle_cible_session:
++            return {"reveille": False, "raison": "auto-reveil refuse : c'est ce topic qui parle"}
++    except Exception:
++        cle_cible_session = None
++
++    cle = _cle_cible(platform_name, chat_id, thread_id)
++    maintenant = time.time()
++
++    global _horodatages
++    _horodatages = [t for t in _horodatages if maintenant - t < FENETRE_S]
++    if len(_horodatages) >= REVEILS_MAX_PAR_FENETRE:
++        return {
++            "reveille": False,
++            "raison": (
++                f"plafond global atteint ({REVEILS_MAX_PAR_FENETRE} reveils / {FENETRE_S:g}s) : "
++                "emballement suppose, chaine coupee"
++            ),
++        }
++
++    dernier = _derniers.get(cle, 0.0)
++    if maintenant - dernier < COOLDOWN_S:
++        return {"reveille": False, "raison": f"reveil ignore : ce topic vient d'etre reveille (<{COOLDOWN_S:g}s)"}
++    _derniers[cle] = maintenant
++    _horodatages.append(maintenant)
++
++    try:
++        from gateway.platforms.base import MessageEvent, MessageType
++
++        evenement = MessageEvent(
++            text=f"{PREAMBULE}\n\n{texte}",
++            message_type=MessageType.TEXT,
++            source=source,
++            internal=True,
++        )
++
++        boucle = getattr(_gateway, "_gateway_loop", None) or asyncio.get_event_loop()
++
++        # La profondeur est portee par un contexte copie, pas par le contexte
++        # courant : sans ca, le tour appelant resterait marque a +1 et son
++        # second reveil serait compte comme un troisieme.
++        contexte = contextvars.copy_context()
++        contexte.run(_PROFONDEUR.set, profondeur + 1)
++
++        def _lancer():
++            contexte.run(asyncio.ensure_future, adapter.handle_message(evenement))
++
++        if boucle.is_running():
++            boucle.call_soon_threadsafe(_lancer)
++        else:  # pragma: no cover - le gateway tourne toujours sa boucle
++            boucle.run_until_complete(adapter.handle_message(evenement))
++
++        return {"reveille": True, "profondeur": profondeur + 1}
++    except Exception as exc:
++        logger.warning("bus: reveil du topic %s echoue: %s", cle, exc)
++        return {"reveille": False, "raison": f"reveil echoue: {exc}"}
+diff --git a/gateway/run_startup.py b/gateway/run_startup.py
+index 4ee1d76eb4..47c08cc747 100644
+--- a/gateway/run_startup.py
++++ b/gateway/run_startup.py
+@@ -752,6 +752,13 @@ class GatewayStartupMixin:
+             with _log_suppressed(logging.DEBUG, "Startup watchdog disarm failed", exc_info=True):
+                 from hermes_startup_watchdog import disarm_startup_watchdog
+                 disarm_startup_watchdog()
++        # Bus inter-topics : sans cette reference, send_message(reveiller=true)
++        # ne peut atteindre aucun adaptateur et retombe en simple envoi.
++        try:
++            from gateway.bus import register_gateway as _bus_register
++            _bus_register(self)
++        except Exception as _bus_exc:  # pragma: no cover - jamais fatal
++            logger.warning("Bus inter-topics indisponible: %s", _bus_exc)
+         logger.info("Session storage: %s", self.config.sessions_dir)
+         self._start_log_systemd_timing_alignment()
+         # Log the resolved max_iterations so operators can verify the config.yaml → env bridge.
+diff --git a/tests/gateway/test_bus.py b/tests/gateway/test_bus.py
+new file mode 100644
+index 0000000000..38333f242a
+--- /dev/null
++++ b/tests/gateway/test_bus.py
+@@ -0,0 +1,166 @@
++"""Bus inter-topics : le reveil d'une session, et surtout ses refus.
++
++Un bus sans garde est une boucle infinie qui attend son heure. Ces tests
++verifient d'abord que les gardes mordent, ensuite seulement que le cas
++nominal passe.
++"""
++import asyncio
++import contextvars
++
++import pytest
++
++from gateway import bus
++from gateway.session import Platform, SessionSource, build_session_key
++from gateway.session_context import set_session_vars
++
++CHAT = "-1001"
++THREAD = "2"
++
++
++class _Adapter:
++    def __init__(self):
++        self.recus = []
++        self.profondeurs = []
++
++    async def handle_message(self, event):
++        self.recus.append(event)
++        self.profondeurs.append(bus.profondeur_courante())
++
++
++class _Entree:
++    def __init__(self, origin):
++        self.origin = origin
++
++
++class _Store:
++    def __init__(self, entrees):
++        self._entrees = entrees
++
++    def list_sessions(self):
++        return self._entrees
++
++
++class _Gateway:
++    def __init__(self, adapter, source):
++        self.adapters = {Platform.TELEGRAM: adapter}
++        self.session_store = _Store([_Entree(source)])
++        self._gateway_loop = None
++
++    def _build_process_event_source(self, _d):
++        return None
++
++
++@pytest.fixture
++def bancs():
++    source = SessionSource(
++        platform=Platform.TELEGRAM, chat_id=CHAT, chat_type="group", thread_id=THREAD
++    )
++    adapter = _Adapter()
++    gw = _Gateway(adapter, source)
++    bus._derniers.clear()
++    bus._horodatages.clear()
++    bus.register_gateway(gw)
++    yield gw, adapter
++    bus.register_gateway(None)
++    bus._derniers.clear()
++    bus._horodatages.clear()
++
++
++def _dans_boucle(fn):
++    async def _run():
++        bus._gateway._gateway_loop = asyncio.get_running_loop()
++        out = fn()
++        await asyncio.sleep(0.05)
++        return out
++
++    return asyncio.run(_run())
++
++
++def test_reveil_nominal_injecte_un_tour_dans_la_bonne_session(bancs):
++    _, adapter = bancs
++    out = _dans_boucle(lambda: bus.reveiller("telegram", CHAT, THREAD, "Ou en est projet-a ?"))
++
++    assert out["reveille"] is True
++    assert len(adapter.recus) == 1
++    event = adapter.recus[0]
++    # internal=True : l'event synthetique saute l'autorisation utilisateur,
++    # sinon le gateway le rejette comme venant d'un inconnu.
++    assert event.internal is True
++    assert "Ou en est projet-a ?" in event.text
++    # Le destinataire doit savoir que ce n'est pas USER qui parle.
++    assert bus.PREAMBULE in event.text
++    assert build_session_key(event.source) == f"agent:main:telegram:group:{CHAT}:{THREAD}"
++
++
++def test_le_tour_reveille_voit_la_profondeur_incrementee(bancs):
++    _, adapter = bancs
++    _dans_boucle(lambda: bus.reveiller("telegram", CHAT, THREAD, "x"))
++    assert adapter.profondeurs == [1]
++
++
++def test_la_profondeur_de_l_appelant_reste_intacte(bancs):
++    _dans_boucle(lambda: bus.reveiller("telegram", CHAT, THREAD, "x"))
++    # Sans contexte copie, le tour appelant resterait marque a 1 et son
++    # deuxieme reveil serait compte comme un troisieme.
++    assert bus.profondeur_courante() == 0
++
++
++def test_profondeur_maximale_coupe_la_chaine(bancs):
++    def essai():
++        ctx = contextvars.copy_context()
++        ctx.run(bus._PROFONDEUR.set, bus.PROFONDEUR_MAX)
++        return ctx.run(bus.reveiller, "telegram", CHAT, THREAD, "trop loin")
++
++    out = _dans_boucle(essai)
++    assert out["reveille"] is False
++    assert "profondeur" in out["raison"]
++
++
++def test_auto_reveil_refuse(bancs):
++    def essai():
++        ctx = contextvars.copy_context()
++
++        def _dedans():
++            set_session_vars(session_key=f"agent:main:telegram:group:{CHAT}:{THREAD}")
++            return bus.reveiller("telegram", CHAT, THREAD, "moi-meme")
++
++        return ctx.run(_dedans)
++
++    out = _dans_boucle(essai)
++    assert out["reveille"] is False
++    assert "auto-reveil" in out["raison"]
++
++
++def test_cooldown_bloque_le_reveil_immediat_du_meme_topic(bancs):
++    def essai():
++        bus.reveiller("telegram", CHAT, THREAD, "un")
++        return bus.reveiller("telegram", CHAT, THREAD, "deux")
++
++    out = _dans_boucle(essai)
++    assert out["reveille"] is False
++
++
++def test_plafond_global_borne_un_emballement(bancs):
++    def essai():
++        acceptes = 0
++        for i in range(bus.REVEILS_MAX_PAR_FENETRE + 4):
++            bus._derniers.clear()  # neutralise le cooldown par topic
++            if bus.reveiller("telegram", CHAT, THREAD, f"m{i}")["reveille"]:
++                acceptes += 1
++        return acceptes
++
++    assert _dans_boucle(essai) == bus.REVEILS_MAX_PAR_FENETRE
++
++
++def test_sans_gateway_le_bus_est_inerte():
++    bus.register_gateway(None)
++    bus._derniers.clear()
++    out = bus.reveiller("telegram", CHAT, THREAD, "x")
++    assert out["reveille"] is False
++    assert "gateway" in out["raison"]
++
++
++def test_plateforme_sans_adaptateur(bancs):
++    out = _dans_boucle(lambda: bus.reveiller("discord", "123", None, "x"))
++    assert out["reveille"] is False
++    assert "adaptateur" in out["raison"]
+diff --git a/tests/tools/test_send_message_reveiller.py b/tests/tools/test_send_message_reveiller.py
+new file mode 100644
+index 0000000000..95b435b6d8
+--- /dev/null
++++ b/tests/tools/test_send_message_reveiller.py
+@@ -0,0 +1,86 @@
++"""send_message(reveiller=true) : le bus prend la place du miroir.
++
++Le miroir ecrit en role assistant, donc l'agent d'en face relit le message
++comme sa propre parole passee et ne travaille jamais. Quand le reveil reussit,
++le miroir ne doit donc pas s'ajouter par-dessus : le tour reveille enregistre
++deja le message en role user.
++"""
++import json
++from unittest.mock import AsyncMock, patch
++
++from tests.tools.test_send_message_tool import _make_config, _run_async_immediately
++from tools.send_message_tool import send_message_tool
++
++
++def _envoyer(args):
++    config, _ = _make_config()
++    with patch("gateway.config.load_gateway_config", return_value=config), \
++         patch("tools.interrupt.is_interrupted", return_value=False), \
++         patch("model_tools._run_async", side_effect=_run_async_immediately), \
++         patch("tools.send_message_tool._send_to_platform",
++               new=AsyncMock(return_value={"success": True})), \
++         patch("gateway.mirror.mirror_to_session", return_value=True) as miroir, \
++         patch("gateway.bus.reveiller") as reveil:
++        yield_result = json.loads(send_message_tool(args))
++    return yield_result, miroir, reveil
++
++
++def test_sans_reveiller_le_miroir_reste_le_comportement_par_defaut():
++    resultat, miroir, reveil = _envoyer(
++        {"action": "send", "target": "telegram:-1001:2", "message": "coucou"}
++    )
++    assert resultat["mirrored"] is True
++    reveil.assert_not_called()
++    miroir.assert_called_once()
++
++
++def test_reveil_reussi_remplace_le_miroir():
++    def _ok(*_a, **_k):
++        return {"reveille": True, "profondeur": 1}
++
++    config, _ = _make_config()
++    with patch("gateway.config.load_gateway_config", return_value=config), \
++         patch("tools.interrupt.is_interrupted", return_value=False), \
++         patch("model_tools._run_async", side_effect=_run_async_immediately), \
++         patch("tools.send_message_tool._send_to_platform",
++               new=AsyncMock(return_value={"success": True})), \
++         patch("gateway.mirror.mirror_to_session", return_value=True) as miroir, \
++         patch("gateway.bus.reveiller", side_effect=_ok) as reveil:
++        resultat = json.loads(send_message_tool(
++            {"action": "send", "target": "telegram:-1001:2",
++             "message": "Ou en est projet-a ?", "reveiller": True}
++        ))
++
++    assert resultat["reveille"] is True
++    assert "mirrored" not in resultat
++    miroir.assert_not_called()
++    reveil.assert_called_once_with("telegram", "-1001", "2", "Ou en est projet-a ?")
++
++
++def test_reveil_refuse_retombe_sur_le_miroir_et_dit_pourquoi():
++    def _ko(*_a, **_k):
++        return {"reveille": False, "raison": "gateway indisponible dans ce processus"}
++
++    config, _ = _make_config()
++    with patch("gateway.config.load_gateway_config", return_value=config), \
++         patch("tools.interrupt.is_interrupted", return_value=False), \
++         patch("model_tools._run_async", side_effect=_run_async_immediately), \
++         patch("tools.send_message_tool._send_to_platform",
++               new=AsyncMock(return_value={"success": True})), \
++         patch("gateway.mirror.mirror_to_session", return_value=True) as miroir, \
++         patch("gateway.bus.reveiller", side_effect=_ko):
++        resultat = json.loads(send_message_tool(
++            {"action": "send", "target": "telegram:-1001:2",
++             "message": "x", "reveiller": True}
++        ))
++
++    # L'envoi a reussi : un reveil refuse ne doit pas le transformer en echec.
++    assert resultat["success"] is True
++    assert resultat["reveille"] is False
++    assert "gateway indisponible" in resultat["reveil_refuse"]
++    miroir.assert_called_once()
++
++
++def test_le_parametre_est_declare_dans_le_schema():
++    from tools.send_message_tool import SEND_MESSAGE_SCHEMA
++    assert "reveiller" in SEND_MESSAGE_SCHEMA["parameters"]["properties"]
+diff --git a/tools/send_message_tool.py b/tools/send_message_tool.py
+index 9b1e549fbc..50371212b7 100644
+--- a/tools/send_message_tool.py
++++ b/tools/send_message_tool.py
+@@ -201,6 +201,7 @@ def _handle_react(args, remove=False):
+ 
+ def _handle_send(args):
+     target, message = args.get("target", ""), args.get("message", "")
++    reveiller = bool(args.get("reveiller", False))
+     if not target or not message:
+         return tool_error("Both 'target' and 'message' are required when action='send'")
+     platform_name, chat_id, thread_id, resolution_error = _resolve_tool_target(target)
+@@ -262,7 +263,20 @@ def _handle_send(args):
+         if isinstance(result, dict) and result.get("success"):
+             if used_home_channel:
+                 result["note"] = f"Sent to {platform_name} home channel (chat_id: {chat_id})"
+-            if mirror_text and _mirror_sent_message(platform_name, chat_id, mirror_text, thread_id):
++            # Bus inter-topics : reveiller la session cible plutot que la miroiter.
++            # Le miroir ecrit en role assistant, donc l'agent d'en face relit le
++            # message comme sa propre parole passee et ne travaille jamais.
++            if mirror_text and reveiller:
++                try:
++                    from gateway import bus
++                    issue = bus.reveiller(platform_name, chat_id, thread_id, mirror_text)
++                except Exception as exc:
++                    issue = {"reveille": False, "raison": f"bus indisponible: {exc}"}
++                result["reveille"] = bool(issue.get("reveille"))
++                if not issue.get("reveille"):
++                    result["reveil_refuse"] = issue.get("raison", "")
++            if (mirror_text and not result.get("reveille")
++                    and _mirror_sent_message(platform_name, chat_id, mirror_text, thread_id)):
+                 result["mirrored"] = True
+         if isinstance(result, dict) and "error" in result:
+             result["error"] = _sanitize_error_text(result["error"])
+@@ -678,6 +692,10 @@ SEND_MESSAGE_SCHEMA = {
+                 "type": "string",
+                 "description": "The message text to send. To send an image or file, include MEDIA:<local_path> (e.g. 'MEDIA:/tmp/report.pdf') in the message — the platform will deliver it as a native media attachment."
+             },
++            "reveiller": {
++                "type": "boolean",
++                "description": "Wake the target conversation instead of only writing to it. Default false. When true, the message is injected as a USER turn into the target topic's own session and its agent actually runs, with all its existing context, then answers in its own topic. Use it to make another topic work; leave it off to merely inform. Refused beyond 2 chained wakes, on self-wake, and outside the gateway process."
++            },
+             "emoji": {
+                 "type": "string",
+                 "description": "For action='react': the emoji to react with (e.g. '❤️'). On iMessage, ❤️👍👎😂‼️❓ render as native tapbacks; other emoji use custom-emoji reactions."

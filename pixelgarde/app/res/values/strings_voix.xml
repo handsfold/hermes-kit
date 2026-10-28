@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voix_detail">Details</string>
+    <string name="voix_rien_reecouter">Nothing to replay.</string>
+    <string name="voix_titre_reponse">Reply from HQ</string>
+    <string name="voix_titre_rapport">Report from HQ</string>
+    <string name="voix_qg_patiente">HQ is working on it</string>
+    <string name="voix_envoi_annule">Sending cancelled.</string>
+    <string name="voix_pas_plus_ancien">No older report.</string>
+    <string name="voix_dernier_rapport">This is the last report.</string>
+    <string name="voix_format_heure">HH:mm</string>
+    <string name="voix_titre_relu">Report %1$d/%2$d, heard at %3$s</string>
+    <string name="voix_canal_lecture">HQ voice</string>
+    <string name="voix_canal_conversation">Voice conversation</string>
+    <string name="voix_titre_pause">%1$s (paused)</string>
+    <string name="voix_touche_reprendre">Tap the bubble to resume</string>
+    <string name="voix_touche_pause">Tap the bubble to pause</string>
+    <string name="voix_btn_precedent">Previous</string>
+    <string name="voix_btn_pause">Pause</string>
+    <string name="voix_btn_reprendre">Resume</string>
+    <string name="voix_btn_suivant">Next</string>
+    <string name="voix_btn_arreter">Stop</string>
+    <string name="voix_conversation">Conversation with HQ</string>
+</resources>

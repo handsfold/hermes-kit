@@ -1,0 +1,5 @@
+# Le sous-menu « Reglages » de la pastille. Meme format que menu.txt.
+# Ce qui sert rarement. Le garde ajoute ensuite Vitesse, Cerveau, Filtre bleu,
+# puis « Retour ». Un appui sur une action ici la lance et referme le menu.
+lireecran:Lire l'écran
+rec:Enregistrer l'écran

@@ -1,0 +1,8 @@
+name: telegram-menus
+version: 1.0.0
+description: "Telegram menus for USER, bilingual (English by default, French option via the Language button): /menu with buttons (categories, effort, PyRIT, Bench) and /supp with confirmation. Replaces the menu-cmd and session-supp plugins."
+author: hermes-kit
+kind: standalone
+provides_commands:
+  - menu
+  - supp

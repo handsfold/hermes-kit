@@ -1,0 +1,2548 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""pixel-garde - cede la main a l'humain, et lui donne un bouton d'arret.
+
+Trois oreilles, chacune dans son fil :
+
+  1. /dev/input/event1  le tactile. Un vrai doigt sur l'ecran.
+  2. /dev/input/event0  les boutons. Volume Bas-Haut-Bas-Haut = arret d'urgence.
+  3. logcat             le bouton ARRETER de la notification.
+
+Les evenements injectes par adb (input tap, input swipe, keyevent) n'apparaissent
+pas dans /dev/input : ce garde ne voit donc que l'humain, jamais l'agent.
+
+PIEGE FONDATEUR : `getevent` n'accepte QU'UN SEUL peripherique en argument.
+Lui en passer deux affiche l'aide et rend la main aussitot. C'est ce qui a rendu
+le garde muet pendant sa premiere vie. Un fil par peripherique, donc.
+
+Deux fichiers, lus par le CLI `pixel` avant chaque action :
+
+  /tmp/pixel-humain   sa date de modification = dernier contact du doigt.
+  /tmp/pixel-stop     present = arret d'urgence, le CLI refuse toute action.
+
+Trois facons d'armer l'arret : Volume Bas-Haut-Bas-Haut, le bouton ARRETER de la
+notification, ou `pixel stop`. Pour le lever : le bouton REPRENDRE, ou `pixel go`.
+"""
+
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+# Les fichiers d'etat vivent dans /tmp. PIXEL_TMP les deplace, pour les essais :
+# un banc de test ne doit jamais ecrire dans l'etat du garde en service.
+PIXEL_TMP = os.environ.get("PIXEL_TMP", "/tmp")
+HUMAIN = os.path.join(PIXEL_TMP, "pixel-humain")
+STOP = os.path.join(PIXEL_TMP, "pixel-stop")
+ETAT = os.path.join(PIXEL_TMP, "pixel-etat")      # ecrit par le CLI : veille | attente | pilote
+REC = os.path.join(PIXEL_TMP, "pixel-rec")          # present = screenrecord tourne sur le telephone
+CACHEE = os.path.join(PIXEL_TMP, "pixel-bulle-off")   # present = USER a masque la pastille, exprès
+PID = os.path.join(PIXEL_TMP, "pixel-garde.pid")
+CMD_VU = os.path.join(PIXEL_TMP, "pixel-cmd-vu")   # horodatage de la derniere commande deja jouee
+# Le relais reseau (bin/pixel/creeper-relais.py) : l'appli y poste ses appuis
+# quand ADB ne passe plus (Tailscale ou debogage sans fil coupes, 4G).
+RELAIS_RACINE = os.path.expanduser("~/.hermes/creeper-relais")
+RELAIS_APPUIS = os.path.join(RELAIS_RACINE, "appuis.txt")
+RELAIS_VU = os.path.join(RELAIS_RACINE, "vu")
+RELAIS_ETAT = os.path.join(RELAIS_RACINE, "etat")
+RELAIS_CURSEUR = os.path.join(PIXEL_TMP, "pixel-relais-vu")   # dernier appui relaye deja joue
+PIXEL_ADDR = os.environ.get("PIXEL_ADDR", "__PIXEL_IP__:5555")
+# Present tant qu'une conversation vocale est ouverte. Pose par voixdebut.sh,
+# retire par voixfin.sh. Le garde ne le cree jamais : c'est le telephone qui
+# sait s'il ecoute, pas nous.
+VOIX = os.path.join(PIXEL_TMP, "pixel-voix")
+# Le sous-etat de la conversation : ecoute | travaille | pret. Ecrit par
+# voixdebut.sh, voixecoute.sh, voixtour.sh et voixpret.sh, jamais par le
+# garde. Sans lecture ici, la pastille reste bloquee sur "voix" (bleu, QG)
+# du debut a la fin d'un tour : le sous-etat existait sur disque mais
+# n'atteignait jamais l'ecran.
+VOIX_ETAT = os.path.join(PIXEL_TMP, "pixel-voix-etat")
+OCCUPE = os.path.join(PIXEL_TMP, "pixel-occupe")     # pose par une action longue, voir etat_courant()
+# Une conversation abandonnee laissait son marqueur sur disque pour toujours :
+# USER ferme la bulle, coupe l'ecran, et voixfin.sh n'est jamais appele. Le
+# 2026-08-28 ce verrou fantome a bailonne 10 h de rapports (pose a 01h13, encore
+# la a 11h). Passe ce delai sans le moindre changement d'etat, la conversation
+# est morte : on retire les marqueurs et on rend la parole aux rapports.
+VOIX_PEREMPTION_S = 600
+# La pastille y depose chaque appui. Voir Bulle.deposer() : logcat est un flux
+# qui perd ce qui passe pendant une coupure, ce fichier attend.
+CMD_TEL = "/sdcard/Android/data/com.poste.pixelgarde/files/cmd.txt"
+REGARD_TEL = "/sdcard/Android/data/com.poste.pixelgarde/files/regard.txt"
+# La demande d'autorisation de Chrome (v2.41 du Creeper) : invite.txt vaut 1
+# tant qu'elle est a l'ecran, invite.vivant est touche a chaque passage.
+INVITE_TEL = "/sdcard/Android/data/com.poste.pixelgarde/files/invite.txt"
+VIVANT_TEL = "/sdcard/Android/data/com.poste.pixelgarde/files/invite.vivant"
+NAVIGATEURS_INVITE = ("com.android.chrome/", "com.chrome.beta/",
+                      "com.chrome.dev/", "com.chrome.canary/")
+# La file des rapports du QG. Lue a chaque peinture, en direct : un rapport
+# arrive quand il arrive, et la pastille doit s'allumer au tour suivant, pas
+# au prochain redemarrage du garde.
+QG_DB = os.environ.get("QG_DB", os.path.expanduser("~/.hermes/qg.db"))
+# Le nom lisible de chaque topic Telegram : « 1095 » -> « Book ». Sans lui
+# les boutons de rapport porteraient un numero de thread.
+QG_NOMS = os.path.expanduser("~/.hermes/qg-noms.json")
+# L'id du dernier rapport ecoute. Le QG le relit pour savoir a QUI relayer
+# la reponse de USER quand il repond sans preciser le sujet.
+QG_ECOUTE = os.path.expanduser("~/.hermes/qg-dernier-ecoute")
+# Ou commence la fenetre des boutons de rapport, quand la file en compte
+# plus que le menu ne peut en porter.
+RAP_DECALAGE = os.path.join(PIXEL_TMP, "pixel-rapports-decalage")
+# Le CLI de la file. Appele seulement quand USER ecarte un rapport du doigt :
+# un geste rare, ou les 30 ms d'un demarrage Python ne se voient pas, et ou
+# reecrire l'UPDATE ici ferait diverger deux verites.
+QG_ATTENTE = os.environ.get("QG_ATTENTE", "/usr/local/bin/qg-attente")
+# Les voix fabriquees d'avance, une paire mp3 + ogg par rapport. Leur presence
+# est ce qui rend l'appui instantane.
+QG_VOIX = os.path.expanduser("~/.hermes/qg-voix")
+
+
+def _qg_reglage(cle, defaut):
+    """Un reglage du QG, ou son defaut si la configuration est illisible.
+
+    Le garde ne doit JAMAIS mourir sur un fichier de configuration casse : il
+    tient la pastille et l'arret d'urgence. En cas de doute il prend le defaut
+    et continue. Les valeurs de reference sont dans hermes/scripts/qg-config.py.
+    """
+    try:
+        with open(os.path.expanduser("~/.hermes/qg-config.json")) as f:
+            return json.load(f).get(cle, defaut)
+    except Exception:
+        return defaut
+PREVOIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qg-prevoix.sh")
+# Qui a la parole sur le telephone : LIBRE, LECTURE, FENETRE ou TOUR. Le meme
+# fichier sert aux scripts d'actions par la ligne de commande. Revue du
+# 2026-10-06 : sans cet etat commun, cinq producteurs de voix se coupaient.
+_spec_lec = __import__("importlib.util").util.spec_from_file_location(
+    "qg_lecture", os.path.join(os.path.dirname(os.path.abspath(__file__)), "qg-lecture"),
+    loader=__import__("importlib.machinery").machinery.SourceFileLoader(
+        "qg_lecture", os.path.join(os.path.dirname(os.path.abspath(__file__)), "qg-lecture")))
+qg_lecture = __import__("importlib.util").util.module_from_spec(_spec_lec)
+_spec_lec.loader.exec_module(qg_lecture)
+# continu | silencieux. Le mode de lecture des rapports du QG, choisi par USER
+# depuis la pastille. « silencieux » par defaut, et c'est deliberé : une voix
+# qui part sans qu'on l'ait demandee dans une reunion coute plus cher qu'un
+# rapport lu dix minutes trop tard. En « continu », le garde declenche la
+# lecture groupee des qu'un rapport tombe, sans attendre d'appui.
+QG_MODE = os.path.expanduser("~/.hermes/qg-voix-mode")
+TACTILE = "/dev/input/event1"   # synaptics_tcm_touch
+BOUTONS = "/dev/input/event0"   # gpio_keys
+
+APPLI = "com.poste.pixelgarde"
+ACT_SHOW = "com.poste.pixel.SHOW"
+ACT_STOP = "com.poste.pixel.STOP"
+ACT_GO = "com.poste.pixel.GO"
+ACT_BULLE = "com.poste.pixel.BULLE"
+TAG = "pixelgarde"
+
+ACTIONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "actions")
+TRACES = os.path.join(PIXEL_TMP, "pixel-traces")   # sortie des actions, une par identifiant
+RESERVES = ("stop", "go", "masquer", "revenir")
+
+# Le garde est le SEUL a passer outre le garde-fou adb : c'est lui qui ecoute
+# le doigt de USER et son bouton REPRENDRE. S'il etait bloque comme les autres,
+# l'arret d'urgence deviendrait irreversible depuis le telephone.
+os.environ["PIXEL_GARDE"] = "1"
+
+ADB = (os.environ.get("ADB") or shutil.which("adb")
+       or os.path.expanduser("~/.local/platform-tools/adb"))
+
+_verrou = threading.Lock()
+
+
+def adresse():
+    """Reutilise la resolution d'adresse du CLI pixel : l'IP LAN bouge."""
+    ici = os.path.dirname(os.path.abspath(__file__))
+    r = subprocess.run([sys.executable, os.path.join(ici, "pixel"), "etat"],
+                       capture_output=True, text=True, timeout=45)
+    for src in (r.stdout, open(os.path.join(PIXEL_TMP, "pixel-adresse")).read()
+                if os.path.exists(os.path.join(PIXEL_TMP, "pixel-adresse")) else ""):
+        m = re.search(r"\d+\.\d+\.\d+\.\d+:\d+", src)
+        if not m:
+            continue
+        cand = m.group(0)
+        # Un cache jamais invalide fige le garde sur une IP LAN morte : il a
+        # tourne a vide toute la journee du 26/08 sur .86 alors que le
+        # telephone etait passe en .85. On verifie avant de rendre.
+        ip, port = cand.rsplit(":", 1)
+        s = socket.socket()
+        s.settimeout(2)
+        try:
+            s.connect((ip, int(port)))
+            # Le port ouvert ne suffit pas : le 23/09 un Samsung A07 a repondu
+            # ici et le garde l'a ecoute 23 h. On exige le modele du Pixel.
+            r2 = subprocess.run([ADB, "-s", cand, "shell", "getprop", "ro.product.model"],
+                                capture_output=True, text=True, timeout=10)
+            if "Pixel 9 Pro XL" not in (r2.stdout or ""):
+                print("adresse {} ignoree : modele {!r}".format(
+                    cand, (r2.stdout or "").strip()), flush=True)
+                continue
+            return cand
+        except OSError:
+            if src is not r.stdout:
+                try:
+                    os.remove(os.path.join(PIXEL_TMP, "pixel-adresse"))
+                except OSError:
+                    pass
+        finally:
+            s.close()
+    lancer_reprise()
+    return None
+
+
+def lancer_reprise():
+    """Aucune adresse ne repond : pixel-reprise (2026-10-27) prend le relais.
+
+    Avant, le garde retentait `pixel etat` toutes les 30 s pendant des heures
+    (04:26 a 11:08 le 27/10) sans disconnect, sans kill-server, sans alerte.
+    Detache, borne a 5 min, un seul a la fois (verrou), muet si /tmp/pixel-stop.
+    """
+    prog = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pixel-reprise")
+    if not os.path.exists(prog):
+        return
+    try:
+        subprocess.Popen([sys.executable, prog], stdin=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError as e:
+        print("pixel-reprise non lance : {}".format(e), flush=True)
+
+
+def sh(addr, cmd, timeout=15):
+    return subprocess.run([ADB, "-s", addr, "shell", cmd],
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def toucher(chemin):
+    with open(chemin, "w") as f:
+        f.write(str(time.time()))
+
+
+def etat_courant():
+    """L'arret d'urgence prime sur tout le reste : c'est un verrou, pas un etat."""
+    if os.path.exists(STOP):
+        return "suspendu"
+    try:
+        mot = open(ETAT).read().strip()
+    except OSError:
+        mot = "veille"   # fichier absent = veille, mais la suite compte encore
+    mot = mot if mot in ("attente", "pilote", "veille") else "veille"
+    # Un bouton lance un travail de quelques secondes (« Ou j'en suis ») : la
+    # bulle le montre tout de suite, sinon l'appui parait mort. Borne a 2 min
+    # pour qu'un script tue sans menage ne fige pas la bulle.
+    if mot == "veille" and os.path.exists(OCCUPE):
+        try:
+            if time.time() - os.path.getmtime(OCCUPE) < 120:
+                return "voixtravaille"
+        except OSError:
+            pass
+    # Un rapport qui attend rend la main a USER : c'est exactement ce que dit
+    # deja l'ambre. On ne l'affiche QUE sur un fond de veille : ecraser un
+    # pilotage en cours ferait mentir la couleur sur qui tient le telephone.
+    if mot == "veille" and rapport_pret():
+        return "attente"
+    # Une conversation en cours se voit, mais elle ne masque ni un pilotage ni
+    # un rapport qui attend : ceux-la demandent une decision, elle non.
+    if mot == "veille" and os.path.exists(VOIX):
+        sous = sous_etat_voix()
+        if sous == "travaille":
+            return "voixtravaille"
+        if sous == "pret":
+            return "voixpret"
+        return "voix"
+    # L'enregistrement d'ecran laisse une trace sur le disque : il prime sur la
+    # veille et sur la conversation, qui, elles, ne gardent rien.
+    if mot in ("veille", "voix") and os.path.exists(REC):
+        return "capture"
+    return mot
+
+
+def sans_accents(t):
+    """Nettoie un titre de rapport pour le menu.
+
+    Il gardait jadis l'ASCII seul, accents aplatis. Depuis le 2026-10-02
+    l'encodage se fait au dernier moment, dans pour_adb() : ici on retire
+    seulement ce qui casserait le format (barre verticale, retour a la ligne,
+    emoji hors du plan de base).
+    """
+    import unicodedata
+    t = unicodedata.normalize("NFC", t).replace("|", "/")
+    return "".join(c for c in t if 32 <= ord(c) < 0x10000)
+
+
+def pour_adb(t):
+    """Le menu tel qu'il voyage dans un `adb shell`, en ASCII strict.
+
+    Tout caractere hors ASCII part en sequence \\uXXXX, que l'appli decode
+    (Bulle.decoder). C'est ce qui permet des libelles accentues dans
+    menu.txt sans parier sur l'encodage du shell distant. L'apostrophe
+    devient typographique : la droite fermerait la chaine du shell.
+    """
+    t = t.replace("'", "\u2019")
+    return "".join(c if ord(c) < 127 else "\\u{:04x}".format(ord(c))
+                   for c in t if 32 <= ord(c) < 0x10000)
+
+
+def rapport_pret():
+    """Vrai si un rapport en attente peut se lire TOUT DE SUITE.
+
+    Le badge « ! » s'allumait des le depot, alors que sa voix se fabriquait
+    encore (condensation puis synthese, 20 a 40 s). USER touchait le rapport,
+    attendait la voix a chaud, et la lecture auto semblait ne jamais partir
+    (2026-10-03, 11:22). Pret = voix prefabriquee, ou attente depassee :
+    c'est la meme limite que la lecture auto, qui part alors sans elle.
+    """
+    if not os.path.exists(QG_DB):
+        return False
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        lignes = c.execute("SELECT id, cree FROM attente"
+                           " WHERE statut='nouveau'").fetchall()
+        c.close()
+    except Exception:
+        return rapports_en_attente()[0] > 0
+    limite = int(_qg_reglage("attente_voix_s", 45))
+    for ident, cree in lignes:
+        if os.path.exists(os.path.join(QG_VOIX, "{}.ogg".format(ident))):
+            return True
+        try:
+            if time.time() - float(cree) >= limite:
+                return True
+        except (TypeError, ValueError):
+            return True
+    return False
+
+
+def rapports_en_attente():
+    """(nombre, titre du plus recent). Une lecture sqlite, ~1 ms.
+
+    Le garde n'appelle PAS qg-attente.py ici : demarrer un Python coute 30 ms,
+    et cette fonction est sur le chemin de chaque peinture de la pastille.
+    """
+    if not os.path.exists(QG_DB):
+        return 0, ""
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        r = c.execute("SELECT COUNT(*), "
+                      "(SELECT titre FROM attente WHERE statut='nouveau' "
+                      " ORDER BY cree DESC LIMIT 1) "
+                      "FROM attente WHERE statut='nouveau'").fetchone()
+        c.close()
+        return int(r[0] or 0), (r[1] or "")
+    except Exception:
+        # Base absente, verrouillee ou d'un autre age : la pastille doit
+        # continuer a piloter le telephone. Un rapport rate se rattrape,
+        # un garde mort ne se rattrape pas.
+        return 0, ""
+
+# Les paliers de vitesse de la voix : rapports, lecture de l'ecran et du
+# presse-papier, tous sur la meme cle `debit`. Du plus lent au plus vif.
+# Chaque palier porte un nom, parce qu'un menu qui n'affiche que « +50 % » ne
+# dit rien tant qu'on ne l'a pas essaye. Les valeurs sont celles que edge-tts
+# attend derriere --rate. On reste entre -25 % et +100 % : en dessous la voix
+# traine, au dessus elle devient un grelot et on relit le rapport au lieu de
+# l'ecouter.
+DEBITS = (
+    ("-25%", "Lente"),
+    ("+0%", "Posée"),
+    ("+8%", "Normale"),
+    ("+25%", "Vive"),
+    ("+50%", "Rapide"),
+    ("+75%", "Pressée"),
+    ("+100%", "Maximale"),
+)
+
+# La vue ouverte dans la pastille. Vide = le menu ordinaire. Dans /tmp et non
+# dans ~/.hermes : un sous-menu laisse ouvert n'a aucune raison de survivre a
+# un redemarrage, il ne ferait que surprendre au reveil.
+VUE = os.path.join(PIXEL_TMP, "pixel-vue")
+
+
+def vue_courante():
+    try:
+        return open(VUE).read().strip()
+    except OSError:
+        return ""
+
+
+def vue_ecrire(v):
+    """Ouvre une vue, ou revient au menu ordinaire quand v est vide."""
+    try:
+        if v:
+            with open(VUE, "w") as f:
+                f.write(v + "\n")
+        elif os.path.exists(VUE):
+            os.remove(VUE)
+    except OSError:
+        pass
+
+
+def debit_courant():
+    """Le debit tel que qg-prevoix.sh le lira, ou le defaut."""
+    d = str(_qg_reglage("debit", "+8%")).strip()
+    return d if d in [v for v, _ in DEBITS] else "+8%"
+
+
+def nom_debit(valeur):
+    for v, nom in DEBITS:
+        if v == valeur:
+            return nom
+    return valeur
+
+
+# Le voile ambre se regle en POURCENTAGE, pas en paliers : USER a essaye les
+# cinq crans le 2026-09-07 et a demande un curseur, l'un etant trop clair et
+# le suivant trop sombre. Les mots ci-dessous ne servent plus qu'a resumer la
+# valeur dans le menu principal, ou un chiffre nu ne dit rien.
+BLEUS_MOTS = [(0, "Aucun"), (25, "Doux"), (48, "Moyen"), (70, "Fort"),
+              (92, "Extreme")]
+
+
+def bleu_courant():
+    """L'intensite retenue, de 0 a 100."""
+    try:
+        n = int(_qg_reglage("bleu", 0))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, n))
+
+
+def bleu_auto():
+    """Vrai si le voile suit le coucher et le lever du soleil."""
+    return bool(_qg_reglage("bleu_auto", False))
+
+
+def bleu_mot(pct):
+    """Le palier nomme le plus proche. Double Filtre.nom() cote appli."""
+    return min(BLEUS_MOTS, key=lambda x: abs(x[0] - pct))[1]
+
+
+def puce_bleu_qg():
+    """La porte du sous-menu anti-bleu, avec l'etat en cours a droite.
+
+    Pourquoi cette entree existe : l'eclairage nocturne d'Android s'arrete a
+    2596 K, et USER y etait deja au moment de demander « encore moins de bleu »
+    (2026-09-07). Au-dela, seul un voile pose par l'appli descend plus bas.
+    """
+    # Le libelle reste court : la carte tronque au-dela d'une vingtaine de
+    # caracteres, titre et valeur cumules. « Lumiere bleue » + « auto · 92 % »
+    # rendait « Lumiere bleu… auto · 92 % » (2026-09-07).
+    pct = bleu_courant()
+    droite = "{} %".format(pct) if pct else "Aucun"
+    if bleu_auto():
+        droite = "auto " + droite
+    return "bleu:Filtre bleu~" + droite
+
+
+def menu_bleu():
+    """Le curseur d'intensite, la bascule solaire, et le retour.
+
+    Le curseur se lit au circonflexe cote appli (voir Bulle.curseur) : c'est
+    la pastille qui repeint en direct, pas ce garde. Un aller-retour par
+    logcat prend des secondes, et un curseur en differe ne se regle pas.
+    """
+    auto = bleu_auto()
+    return [
+        "bleuval:Intensit\u00e9^{}".format(bleu_courant()),
+        "bleuauto{}:Coucher du soleil~{}".format(
+            "on" if auto else "off", "oui" if auto else "non"),
+        "blufermer:Retour",
+    ]
+
+
+def _bleu_ecrire(**champs):
+    """Range les reglages du voile dans qg-config.json."""
+    chemin = os.path.expanduser("~/.hermes/qg-config.json")
+    try:
+        with open(chemin) as f:
+            conf = json.load(f)
+    except Exception:
+        conf = {}
+    conf.update(champs)
+    try:
+        with open(chemin, "w") as f:
+            json.dump(conf, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+    except OSError:
+        pass
+
+
+def noter_bleu(pct):
+    """Enregistre ce que le curseur vient de poser, sans rien rediffuser.
+
+    L'appli a DEJA peint et enregistre de son cote : rediffuser ici ferait
+    clignoter le voile a chaque relachement du doigt.
+    """
+    pct = max(0, min(100, int(pct)))
+    _bleu_ecrire(bleu=pct)
+    return pct
+
+
+def basculer_bleu_auto(addr, on):
+    """Allume ou coupe la bascule au coucher du soleil, des deux cotes."""
+    _bleu_ecrire(bleu_auto=bool(on))
+    cmd = ("am broadcast -n {}/.Recepteur -a com.poste.pixel.FILTRE"
+           " --es auto {}".format(APPLI, "1" if on else "0"))
+    subprocess.Popen([ADB, "-s", addr, "shell", cmd],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return on
+
+
+# Le cerveau du standard vocal (qg-standard.py) : modele et effort, lus a
+# chaque tour dans la cle `standard` de qg-config.json. Mesure du 2026-10-01
+# sur une proposition simple : tous entre 3,2 et 4 s, l'effort pese peu sur un
+# tour court. Il pese sur la finesse de la reformulation, d'ou le choix laisse
+# a USER. Le premier est le defaut.
+STANDARDS = (
+    ("claude-opus-5-5-low", "Opus bas"),
+    ("claude-opus-5-5-medium", "Opus moyen"),
+    ("claude-opus-5-5-high", "Opus haut"),
+    ("claude-sonnet-5-5-low", "Sonnet bas"),
+    ("claude-sonnet-5-5-medium", "Sonnet moyen"),
+)
+
+
+def standard_courant():
+    m = str(_qg_reglage("standard", STANDARDS[0][0])).strip()
+    return m if m in [v for v, _ in STANDARDS] else STANDARDS[0][0]
+
+
+def puce_standard_qg():
+    """La porte du sous-menu du cerveau, sur le modele de Vitesse."""
+    nom = dict(STANDARDS).get(standard_courant(), "?")
+    return "voixstandard:Cerveau~" + nom
+
+
+def menu_standard():
+    courant = standard_courant()
+    puces = []
+    for i, (valeur, nom) in enumerate(STANDARDS):
+        puces.append("std{}:{}".format(i, nom) + ("~en cours" if valeur == courant else ""))
+    puces.append("stdfermer:Retour")
+    return puces
+
+
+def choisir_standard(valeur):
+    """Pose le modele du standard. Pris au tour suivant, sans redemarrage."""
+    chemin = os.path.expanduser("~/.hermes/qg-config.json")
+    try:
+        with open(chemin) as f:
+            conf = json.load(f)
+    except Exception:
+        conf = {}
+    conf["standard"] = valeur
+    tmp = chemin + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(conf, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, chemin)
+    return valeur
+
+
+def puce_debit_qg():
+    """La porte du sous-menu, TOUJOURS visible comme le bouton du mode.
+
+    Elle n'agit pas : elle ouvre. USER l'a tranche le 2026-08-30, apres avoir
+    essaye la version qui avancait d'un cran a chaque appui. Un bouton qui
+    tourne en boucle oblige a taper jusqu'a six fois pour atteindre le palier
+    voulu, sans jamais montrer les autres : on regle a l'aveugle, en comptant.
+    Le sous-menu les pose tous a plat, et il en faut un seul appui.
+    """
+    return "voixvitesse:Vitesse~" + nom_debit(debit_courant())
+
+
+def menu_vitesse():
+    """Les sept paliers a plat, celui qui tourne marque a droite.
+
+    Marque en toutes lettres et non par un signe : le panneau tranche a 22
+    caracteres, et une puce isolee en tete de ligne se confond avec l'icone.
+    """
+    courant = debit_courant()
+    puces = []
+    for i, (valeur, nom) in enumerate(DEBITS):
+        droite = "en cours" if valeur == courant else valeur.replace("%", " %")
+        puces.append("vit{}:{}~{}".format(i, nom, droite))
+    puces.append("vitfermer:Retour")
+    return puces
+
+
+def choisir_debit(valeur):
+    """Pose le palier et rend la voix a cette vitesse.
+
+    Ecrire le reglage ne suffit pas : qg-prevoix.sh sort tout de suite quand
+    la paire mp3 + ogg existe deja. Sans purge, USER choisirait un palier et
+    continuerait d'entendre l'ancien sur tous les rapports en file, ce qui
+    ressemble a une panne.
+    """
+    chemin = os.path.expanduser("~/.hermes/qg-config.json")
+    try:
+        with open(chemin) as f:
+            conf = json.load(f)
+    except Exception:
+        conf = {}
+    conf["debit"] = valeur
+    try:
+        with open(chemin, "w") as f:
+            json.dump(conf, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+    except OSError:
+        return debit_courant()
+    purger_voix()
+    return valeur
+
+
+def purger_voix():
+    """Jette les voix deja fabriquees, sur le poste et sur le telephone."""
+    try:
+        for f in os.listdir(QG_VOIX):
+            if f.endswith((".mp3", ".ogg", ".pousse")):
+                try:
+                    os.remove(os.path.join(QG_VOIX, f))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    addr = adresse()
+    if addr:
+        # Un echec ici n'est pas grave : le pousseur reecrit le fichier sous
+        # le meme nom au prochain passage.
+        try:
+            sh(addr, "rm -f /sdcard/Android/data/com.poste.pixelgarde/"
+                     "files/voix/qg-pre-*.mp3 /sdcard/Android/data/com.poste.pixelgarde/"
+                     "files/voix/ml-*.mp3")
+        except Exception:
+            pass
+
+
+def mode_qg():
+    """continu | silencieux. Absent = silencieux : on ne parle pas par defaut."""
+    try:
+        m = open(QG_MODE).read().strip()
+    except OSError:
+        return "silencieux"
+    return "continu" if m == "continu" else "silencieux"
+
+
+def basculer_mode_qg():
+    """Retourne le mode et rend le nouveau. Le fichier est la seule verite."""
+    neuf = "silencieux" if mode_qg() == "continu" else "continu"
+    try:
+        with open(QG_MODE, "w") as f:
+            f.write(neuf + "\n")
+    except OSError:
+        pass
+    return neuf
+
+
+def puce_mode_qg():
+    """Le bouton du mode, TOUJOURS visible, meme file vide.
+
+    Un reglage qui n'apparait que lorsqu'il y a quelque chose a lire est un
+    reglage qu'on ne trouve jamais au moment ou on le cherche.
+    """
+    # L'id porte l'etat, parce que c'est lui qui choisit l'icone cote appli :
+    # cloche pour la lecture auto, cloche barree pour le silence. Un id fige
+    # aurait donne le meme dessin dans les deux cas, et il aurait fallu lire
+    # le libelle pour savoir lequel des deux etait actif.
+    # « muet » disait vrai sur le son et faux sur le reste : USER a cru pendant
+    # une journee que ce bouton mettait la file en pause. Il ne coupe que le
+    # son ; le resume ecrit arrive dans le QG dans les deux cas.
+    # Court, parce que la valeur est peinte a DROITE du libelle et qu'elle
+    # mordait dessus : « Rapports lus a voix haute » s'affichait « Rapport
+    # lus a voix haute », le pluriel avale.
+    if mode_qg() == "continu":
+        return "voixmodeon:Rapports~\u00e0 voix haute"
+    return "voixmodeoff:Rapports~sans lecture"
+
+
+def plus_ancien_en_attente():
+    """L'id du rapport le plus vieux qui attend, ou None.
+
+    La lecture auto prend celui-la et pas le plus recent : un rapport qui
+    patiente depuis une heure passe avant celui qui vient d'arriver.
+    """
+    if not os.path.exists(QG_DB):
+        return None
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        r = c.execute("SELECT id FROM attente WHERE statut='nouveau' "
+                      "ORDER BY cree ASC LIMIT 1").fetchone()
+        c.close()
+        return int(r[0]) if r else None
+    except Exception:
+        return None
+
+
+def rapports_liste(limite=5, decalage=0):
+    """[(id, sujet, titre)] des rapports en attente, du plus recent au plus vieux.
+
+    Meme lecture directe que `rapports_en_attente` et pour la meme raison :
+    cette fonction est sur le chemin de chaque peinture du menu, et demarrer
+    un Python y couterait 30 ms.
+
+    `decalage` fait glisser la fenetre vers les plus anciens. Sans lui, une
+    file de sept rapports en cachait deux pour toujours : le 2026-08-30, apres
+    quatre heures de telephone hors reseau, la bulle est revenue avec sept
+    rapports et n'en a montre que cinq. Les deux plus vieux etaient devenus
+    invisibles, et rien ne le disait.
+    """
+    if not os.path.exists(QG_DB):
+        return []
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        rows = c.execute("SELECT id, cible, titre FROM attente "
+                         "WHERE statut='nouveau' ORDER BY cree DESC "
+                         "LIMIT ? OFFSET ?", (limite, max(0, decalage))).fetchall()
+        c.close()
+        return [(int(r[0]), nom_sujet(r[1] or ""), r[2] or "") for r in rows]
+    except Exception:
+        return []
+
+
+def rapports_lus(limite=3):
+    """[(id, sujet, titre)] des derniers rapports DEJA LUS, du plus recent au plus vieux.
+
+    USER, 2026-10-21 : un resume touche disparaissait du menu, et il fallait
+    « Reecouter le dernier » pour le reprendre. Trois lus restent donc en bas
+    de la liste, grises, et un appui les rejoue. Le 4e pousse le plus ancien.
+    """
+    if not os.path.exists(QG_DB):
+        return []
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        rows = c.execute("SELECT id, cible, titre FROM attente "
+                         "WHERE statut='lu' ORDER BY statut_maj DESC, id DESC "
+                         "LIMIT ?", (limite,)).fetchall()
+        c.close()
+        return [(int(r[0]), nom_sujet(r[1] or ""), r[2] or "") for r in rows]
+    except Exception:
+        return []
+
+
+HIST_LIGNES = os.path.join(PIXEL_TMP, "pixel-hist-lignes")
+HIST_PAS = 20
+
+
+def hist_lignes():
+    """Combien de lus l'historique montre. 20 a l'ouverture, +20 par page."""
+    try:
+        n = int(open(HIST_LIGNES).read().strip())
+    except (OSError, ValueError):
+        return HIST_PAS
+    return max(HIST_PAS, n)
+
+
+def hist_ecrire(n):
+    try:
+        with open(HIST_LIGNES, "w") as f:
+            f.write(str(int(n)))
+    except OSError:
+        pass
+
+
+def menu_historique():
+    """La vue « Historique » (USER, 2026-10-23) : tous les lus, du plus recent au
+    plus vieux, 20 d'abord. L'appli demande la page suivante (rapporthistplus)
+    quand USER arrive en bas de la liste. Un appui rejoue le rapport."""
+    puces = []
+    for ident, sujet, titre in rapports_lus(hist_lignes()):
+        t = sans_accents(titre).strip()
+        reste = 22 - (len(sujet) + 3 if sujet else 0)
+        if len(t) > reste:
+            t = t[:max(1, reste - 1)].rstrip() + "."
+        puces.append("rapportlu{}:{}".format(
+            ident, "{} \u00b7 {}".format(sujet, t) if sujet else t))
+    puces.append("histfermer:Retour")
+    return puces
+
+
+def rapports_total():
+    """Combien attendent en tout. Sert a savoir si la fenetre deborde."""
+    if not os.path.exists(QG_DB):
+        return 0
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        n = c.execute("SELECT COUNT(*) FROM attente WHERE statut='nouveau'").fetchone()[0]
+        c.close()
+        return int(n)
+    except Exception:
+        return 0
+
+
+def decalage_lu():
+    """Ou en est la fenetre. Remis a zero des qu'il sort de la file."""
+    try:
+        with open(RAP_DECALAGE) as f:
+            d = int((f.read() or "0").strip())
+    except (OSError, ValueError):
+        return 0
+    if d <= 0 or d >= rapports_total():
+        return 0
+    return d
+
+
+def decalage_ecrit(d):
+    try:
+        with open(RAP_DECALAGE, "w") as f:
+            f.write(str(max(0, int(d))))
+    except OSError:
+        pass
+
+
+def nom_sujet(cible):
+    """« Book », « Money »... a partir de « telegram:<chat>:<thread> ».
+
+    Le meme mapping que qg-attente.py, relu ici pour ne pas lancer un Python
+    a chaque peinture du menu. Un thread inconnu ne rend rien : le libelle du
+    bouton tombe alors sur le seul titre, ce qui reste lisible.
+    """
+    if not cible:
+        return ""
+    p = cible.split(":")
+    if p[0] == "cron":
+        return "Cron"
+    if len(p) < 3 or not p[2]:
+        return ""
+    try:
+        import json
+        noms = json.load(open(QG_NOMS, encoding="utf-8"))
+    except Exception:
+        return ""
+    return noms.get(p[2], "") or ""
+
+
+def puces_qg():
+    """Un bouton PAR rapport en attente, en tete du menu.
+
+    Le bouton unique « Lire 2 rapports » a saute le 2026-08-29. Il declenchait
+    une synthese groupee de toute la file : USER y perdait le detail de chaque
+    chantier et la voix propre a chaque sujet, et il ne pouvait pas choisir ce
+    qu'il ecoutait. Il voit maintenant la liste et prend celui qu'il veut ;
+    l'id du dernier ecoute sert ensuite a relayer sa reponse au bon topic.
+
+    Cinq au plus : au-dela, le menu de la pastille devient un mur et la
+    premiere ligne, celle qui tombe sous le pouce, n'est plus une action
+    courante mais un rapport de la semaine derniere.
+
+    « Parler au QG » n'est PAS ici : il vit dans menu.txt, donc il reste
+    accessible quand la file est vide.
+    """
+    puces = []
+    decalage = decalage_lu()
+    total = rapports_total()
+    def libelle_rapport(sujet, titre):
+        t = sans_accents(titre).strip()
+        reste = 22 - (len(sujet) + 3 if sujet else 0)
+        if len(t) > reste:
+            t = t[:max(1, reste - 1)].rstrip() + "."
+        return "{} \u00b7 {}".format(sujet, t) if sujet else t
+
+    for ident, sujet, titre in rapports_liste(decalage=decalage):
+        t = sans_accents(titre).strip()
+        # Le sujet d'abord : c'est ce qui dit a USER de quel chantier il s'agit,
+        # et c'est ce qui reste lisible quand le titre est coupe.
+        #
+        # 22 caracteres, pas 32 : le panneau du menu a une largeur fixe et ne
+        # met pas de points de suspension, il TRANCHE. Mesure du 2026-08-29 sur
+        # le Pixel, « Money . Budget aout : t » etait deja rogne a droite.
+        reste = 22 - (len(sujet) + 3 if sujet else 0)
+        if len(t) > reste:
+            t = t[:max(1, reste - 1)].rstrip() + "."
+        libelle = "{} \u00b7 {}".format(sujet, t) if sujet else t
+        puces.append("rapport{}:{}".format(ident, libelle))
+    # La file deborde : une derniere ligne fait tourner la fenetre. Cinq
+    # boutons restent cinq boutons, et plus aucun rapport n'est hors d'atteinte.
+    if total > 5:
+        reste = total - min(decalage + 5, total)
+        puces.append("rapportsuite:{}".format(
+            "+{} plus anciens".format(reste) if reste else "revenir aux recents"))
+    # L'historique : les 3 derniers lus, toujours presents (USER, 2026-10-21).
+    # L'id `rapportlu<N>` ne passe ni par le compteur de la bulle ni par le
+    # balayage de l'appli : ce ne sont pas des rapports en attente.
+    lus = rapports_lus(4)
+    for ident, sujet, titre in lus[:3]:
+        puces.append("rapportlu{}:{}".format(ident, libelle_rapport(sujet, titre)))
+    # Un petit lien sous les 3 lus, seulement s'il y en a d'autres a voir.
+    if len(lus) > 3:
+        puces.append("rapporthist:Voir tout l'historique")
+    return puces
+
+
+def tetes():
+    """Les DEUX libelles du bouton d'etat, envoyes ensemble a l'appli.
+
+    Elle en a besoin des deux pour retourner le bouton toute seule au moment
+    de l'appui, sans attendre la reponse de hote-1.
+    """
+    lignes = []
+    fichier = os.path.join(ACTIONS, "etat.txt")
+    if os.path.exists(fichier):
+        lignes = [l.strip() for l in open(fichier, encoding="utf-8")
+                  if l.strip() and not l.startswith("#") and ":" in l]
+    pause = lignes[0] if len(lignes) > 0 else "stop:Mettre en pause"
+    repris = lignes[1] if len(lignes) > 1 else "go:Reprendre"
+    return (pause + "|" + repris).replace("'", "\u2019")
+
+
+def sous_etat_voix():
+    """ecoute | travaille | pret, ou "" hors conversation.
+
+    Ecrit par voixdebut / voixecoute / voixtour / voixpret, jamais ici : le
+    telephone et hote-1 savent chacun une moitie du cycle, le fichier est le
+    seul point ou les deux se rejoignent.
+    """
+    try:
+        return open(VOIX_ETAT).read().strip()
+    except OSError:
+        return ""
+
+
+def libelle_missions():
+    try:
+        r = subprocess.run([sys.executable, os.path.expanduser("~/.hermes/scripts/missions.py"),
+                            "libelle"], capture_output=True, text=True, timeout=3)
+        return r.stdout.strip().replace("|", " ") or "Activité"
+    except Exception:
+        return "Activité"
+
+
+def menu_bulle():
+    """Le menu de la pastille, lu sur disque a chaque envoi.
+
+    Ajouter un bouton ne demande donc ni recompilation de l'appli, ni
+    redemarrage du garde : editer actions/menu.txt suffit.
+    """
+    # Une vue ouverte remplace le menu entier plutot que de s'y ajouter. Deux
+    # niveaux affiches ensemble, c'est la charte qui l'interdit : jamais deux
+    # menus ouverts a la fois, et on ne cherche pas son reglage au milieu des
+    # actions courantes.
+    if vue_courante() == "vitesse":
+        return pour_adb("|".join(menu_vitesse()))
+    if vue_courante() == "standard":
+        return pour_adb("|".join(menu_standard()))
+    if vue_courante() == "bleu":
+        return pour_adb("|".join(menu_bleu()))
+    if vue_courante() == "reglages":
+        return pour_adb("|".join(menu_reglages()))
+    if vue_courante() == "historique":
+        return pour_adb("|".join(menu_historique()))
+
+    lignes = []
+    voix_en_tete = []
+    fichier = os.path.join(ACTIONS, "menu.txt")
+    if os.path.exists(fichier):
+        for ligne in open(fichier, encoding="utf-8"):
+            ligne = ligne.strip()
+            if ligne and not ligne.startswith("#") and ":" in ligne:
+                # Un seul bouton pour les deux sens : le libelle et l'icone
+                # suivent l'etat reel. Un bouton qui dit encore "Enregistrer"
+                # pendant qu'il enregistre est un bouton qui ment.
+                if ligne.split(":", 1)[0] == "rec" and os.path.exists(REC):
+                    ligne = "recstop:Arr\u00eater l'enregistrement"
+                # Place reservee : le bouton des rapports y prend son etat reel.
+                if ligne.split(":", 1)[0] == "voixmode":
+                    lignes.append(puce_mode_qg())
+                    continue
+                # L'ecran Missions : le libelle dit d'un coup d'oeil qui
+                # travaille, ou le quota du jour (missions.py libelle).
+                if ligne.split(":", 1)[0] == "missions":
+                    lignes.append("missions:" + libelle_missions())
+                    continue
+                # Un enregistrement EN COURS remonte au premier niveau, juste
+                # avant Reglages : le bouton d'arret ne doit jamais etre cache
+                # dans un sous-menu pendant que l'ecran tourne.
+                if ligne.split(":", 1)[0] == "reglages" and os.path.exists(REC):
+                    lignes.append("recstop:Arr\u00eater l'enregistrement")
+                # Meme regle pour la conversation, et elle compte double : le
+                # bouton a change de SENS selon l'etat depuis le 27/08/2026.
+                # En « pret » il reprend la parole, ailleurs il annule. Un
+                # libelle fige a « Parler au QG » ferait appuyer USER pour
+                # parler et couperait son tour a la place.
+                if ligne.split(":", 1)[0] == "voix" and os.path.exists(VOIX):
+                    sous = sous_etat_voix()
+                    if sous == "travaille":
+                        ligne = "voixannuler:Annuler la r\u00e9ponse"
+                    elif sous == "pret":
+                        ligne = "voix:Parler"
+                    else:
+                        ligne = "voix:Envoyer"
+                    # En tete, au-dessus des rapports : c'est l'action que la
+                    # conversation attend. Le 2026-10-01, USER cherchait encore
+                    # ou appuyer, « Reprendre la parole » etait noye en 4e
+                    # ligne sous les rapports.
+                    if sous in ("pret", "ecoute"):
+                        voix_en_tete.append(ligne)
+                        continue
+                lignes.append(ligne)
+                # Le bouton « Raccrocher » a disparu le 28/08/2026 : le micro
+                # ne se relance plus tout seul, donc rien ne tourne en
+                # attente, et « Annuler la reponse » coupe deja le tour en
+                # vol pendant que le QG reflechit. Le script voixraccrocher.sh
+                # reste sur disque, inoffensif, mais n'est plus atteint d'ici.
+    else:
+        lignes = ["masquer:Masquer"]
+    # L'apostrophe casserait la commande : le menu voyage dans un `adb shell`
+    # ou il est entoure de guillemets simples. Le sh du telephone refermerait
+    # la chaine au milieu du libelle, et la diffusion partirait tronquee.
+    # Le bouton d'etat est REVENU dans le menu le 27/08/2026 : sorti la veille
+    # sur l'appui long, il devenait un geste que rien n'annonce. Mais il est en
+    # PIED de liste, pas en tete : la premiere ligne, celle qui tombe sous le
+    # pouce, revient aux actions courantes.
+    etat = tetes().split("|")[1 if os.path.exists(STOP) else 0]
+    # Depuis le 2026-10-01, Vitesse, Cerveau et Filtre bleu vivent dans
+    # « Reglages » (menu_reglages), et les Rapports a leur place dans menu.txt.
+    tout = voix_en_tete + puces_qg() + lignes
+    # USER, 2026-10-13 : micro ouvert, le menu n'offrait que « Envoyer », rien
+    # pour jeter ce qu'il vient de dire. « Ou j'en suis » ne sert a rien
+    # pendant qu'il parle : sa tuile devient « Annuler ». L'id voixannuler
+    # donne la croix orange de l'appli sans nouvel APK ; action_bulle le
+    # dirige vers voixraccrocher.sh (VOIXFIN : couper() jette le son, aucun
+    # tour ne part) tant que le QG ne travaille pas.
+    if "voix:Envoyer" in tout:
+        tout = ["voixannuler:Annuler" if x.split(":", 1)[0] == "bilan" else x for x in tout]
+    return pour_adb("|".join(tout + [etat]))
+
+
+def menu_reglages():
+    """Le sous-menu « Reglages » : ce que USER touche rarement.
+
+    Ne le 2026-10-01 : le premier niveau comptait 12 lignes, USER n'y trouvait
+    plus ses 6 gestes du quotidien. Les actions viennent de
+    actions/reglages.txt, les 3 reglages a valeur sont ajoutes ici. Vitesse,
+    Cerveau et Filtre bleu reviennent ICI par leur « Retour », pas a la racine.
+    """
+    lignes = []
+    fichier = os.path.join(ACTIONS, "reglages.txt")
+    if os.path.exists(fichier):
+        for ligne in open(fichier, encoding="utf-8"):
+            ligne = ligne.strip()
+            if ligne and not ligne.startswith("#") and ":" in ligne:
+                # Pendant un enregistrement, l'arret est deja au premier niveau.
+                if ligne.split(":", 1)[0] == "rec" and os.path.exists(REC):
+                    ligne = "recstop:Arr\u00eater l'enregistrement"
+                lignes.append(ligne)
+    on = lire_verrouille()
+    verrou = "regverrou{}:Lire verrouill\u00e9~{}".format(
+        "on" if on else "off", "oui" if on else "non")
+    ml = mains_libres()
+    mains = "regmains{}:Mains libres~{}".format("on" if ml else "off", "oui" if ml else "non")
+    g = gain_bulle()
+    vol = "reggain:Volume bulle~" + dict(GAINS_BULLE).get(g, "+{} dB".format(g // 100))
+    return lignes + [mains, vol, verrou, puce_debit_qg(), puce_standard_qg(), puce_bleu_qg(), "regfermer:Retour"]
+
+
+def marquer_vu(ms):
+    """Le curseur du canal de rattrapage. Il ne recule jamais.
+
+    Ecrit aussi par l'oreille logcat : une commande deja jouee par la voie
+    rapide ne doit pas etre rejouee 5 s plus tard par le fichier.
+    """
+    try:
+        vu = int(open(CMD_VU).read().strip())
+    except (OSError, ValueError):
+        vu = 0
+    if ms > vu:
+        with open(CMD_VU, "w") as f:
+            f.write(str(int(ms)))
+
+
+def rattraper(addr, texte):
+    """Rejoue un appui que le flux logcat n'a pas vu passer.
+
+    Format depose par l'appli : "<millisecondes> <id>".
+    """
+    parts = texte.strip().split()
+    if len(parts) < 2 or not parts[0].isdigit():
+        return
+    horo = int(parts[0])
+    try:
+        vu = int(open(CMD_VU).read().strip())
+    except (OSError, ValueError):
+        vu = 0
+    if horo <= vu:
+        return
+    marquer_vu(horo)
+    # Un appui vieux de plus de 10 minutes n'est pas un ordre en attente,
+    # c'est un residu : le rejouer reveillerait un pilotage que USER a arrete,
+    # ou en arreterait un qu'il vient de relancer.
+    if abs(time.time() * 1000 - horo) > 600000:
+        return
+    print("appui rattrape (fichier) : {} horo={}".format(parts[1], horo),
+          flush=True)
+    executer(addr, parts[1])
+
+
+# Les actions tournent en Popen, sans attendre : la veille ne doit pas se
+# figer 15 s parce qu'un script parle a Telegram. Mais une action encore en
+# vol ne doit pas non plus etre relancee par-dessus elle-meme. Ce registre
+# est ce qui separe les deux. Sans lui, la lecture auto du QG repartait
+# toutes les 8 s pendant que le digest LLM prenait ses 14 s, et USER recevait
+# le meme rapport trois fois (constate le 2026-08-27).
+_EN_COURS = {}
+
+# Ce qui vient d'etre joue, par id. Un meme appui arrive par logcat ET par le
+# relais reseau : le second venu se tait. Le curseur de cmd.txt ne suffit pas
+# ici, il saute de 5 s et avalerait deux appuis rapides relayes.
+_JOUE = {}
+DOUBLON_S = 4.0
+
+
+def deja_joue(ident, quand):
+    t = _JOUE.get(ident)
+    return t is not None and abs(t - quand) < DOUBLON_S
+
+
+def relais_vivant():
+    """L'appli a interroge le relais il y a moins de 40 s."""
+    try:
+        return time.time() - os.path.getmtime(RELAIS_VU) < 40
+    except OSError:
+        return False
+
+
+def oreille_relais(addr, stop_evt):
+    """Les appuis remontes par le reseau, sans ADB.
+
+    L'appli ecrit la meme ligne que cmd.txt dans le relais, qui l'ajoute a
+    appuis.txt. On lit la fin du fichier toutes les 0,3 s. Un appui deja joue
+    par logcat (meme id, a 4 s pres) n'est pas rejoue.
+    """
+    try:
+        vu = int(open(RELAIS_CURSEUR).read().strip())
+    except (OSError, ValueError):
+        vu = int(time.time() * 1000) - 60000
+    pos = 0
+    while not stop_evt.wait(timeout=0.3):
+        try:
+            taille = os.path.getsize(RELAIS_APPUIS)
+        except OSError:
+            continue
+        if taille < pos:
+            pos = 0                 # fichier raccourci par le menage du relais
+        if taille == pos:
+            continue
+        with open(RELAIS_APPUIS) as f:
+            f.seek(pos)
+            neuf = f.read()
+            pos = f.tell()
+        for ligne in neuf.splitlines():
+            parts = ligne.split()
+            if len(parts) < 2 or not parts[0].isdigit():
+                continue
+            horo = int(parts[0])
+            if horo <= vu:
+                continue
+            vu = horo
+            with open(RELAIS_CURSEUR, "w") as f:
+                f.write(str(horo))
+            if abs(time.time() * 1000 - horo) > 600000:
+                continue
+            if deja_joue(parts[1], horo / 1000.0):
+                continue
+            toucher(HUMAIN)
+            print("appui relaye (reseau) : {}".format(parts[1]), flush=True)
+            executer(addr, parts[1])
+
+
+def tourne_encore(ident):
+    p = _EN_COURS.get(ident)
+    return p is not None and p.poll() is None
+
+
+def executer(addr, ident, env_sup=None):
+    """Un appui sur une puce du menu : id reserve, ou actions/<id>.sh.
+
+    `env_sup` ajoute des variables d'environnement au script lance. Sert a la
+    lecture auto en mode silencieux, qui veut le texte sans le son.
+    """
+    # Le fichier de rattrapage porte l'heure du telephone, la nôtre peut
+    # deriver de quelques secondes : on avance le curseur au-dela pour que le
+    # meme appui ne parte pas deux fois.
+    marquer_vu(time.time() * 1000 + 5000)
+    # Tout geste de bouton de reponse laisse une ligne, reconnu ou non : sans
+    # elle, un clic qui n'aboutit pas ne se distingue pas d'un clic jamais fait.
+    if re.match(r"voix(oui|non|detail|b\d)", ident):
+        print("clic recu : {} ({})".format(
+            ident, "reconnu" if BOUTON_VOIX.fullmatch(ident) else "forme inconnue"),
+            flush=True)
+    # Un bouton de reponse touche deux fois : le second appui est ignore. Le
+    # registre est a part de _JOUE, que l'on remplit juste apres : sinon le
+    # premier appui se prendrait lui-meme pour un doublon.
+    if BOUTON_VOIX.fullmatch(ident) and double_appui(ident):
+        print("bouton {} touche deux fois, ignore".format(ident), flush=True)
+        return
+    _JOUE[ident] = time.time()
+    # Les mots du telephone sur la lecture d'un rapport. Ce ne sont pas des
+    # appuis de USER : rien a peindre, et un sous-menu ouvert reste ouvert.
+    m = re.fullmatch(r"rapport(fini|coupe|refuse):(\d+)", ident)
+    if m:
+        fin_de_lecture(m.group(1), m.group(2))
+        return
+    # « avislu » : USER a touche l'avis d'un rapport lu en mode silencieux. Le
+    # rapport est deja marque entendu, il n'y a plus rien a faire ici.
+    if ident == "avislu":
+        return
+    # Une question tapee dans le champ « Ecrire » de Creeper : le texte voyage
+    # en hexadecimal (un seul mot, la commande est coupee a l'espace).
+    m = ECRIRE.fullmatch(ident)
+    if m:
+        try:
+            texte = bytes.fromhex(m.group(1)).decode("utf-8")[:1000]
+        except (ValueError, UnicodeDecodeError):
+            print("ecrire : texte illisible, ignore", flush=True)
+            return
+        mode, conv, qg = m.group(2) or "question", m.group(3) or "", m.group(4)
+        print("ecrire {} {} conv={} ({} car)".format(
+            "QG" if qg else "standard", mode, conv or "-", len(texte)), flush=True)
+        lancer(addr, "ecrire", {"ECRIRE_TEXTE": texte, "ECRIRE_MODE": mode,
+                                "ECRIRE_CONV": conv, "ECRIRE_QG": "1" if qg else ""})
+        peindre(addr, etat_courant())
+        return
+    m = BOUTON_VOIX.fullmatch(ident)
+    if m:
+        bouton_voix(addr, ident, m.group(1), m.group(2) or "")
+        peindre(addr, etat_courant())
+        return
+    # Toute action etrangere au sous-menu le referme : sans cela USER appuie sur
+    # « Parler au QG », part faire autre chose, et retrouve la liste des
+    # vitesses a la place de ses boutons.
+    if vue_courante() and not (ident == "voixvitesse" or ident.startswith("vit")
+                               or ident == "voixstandard" or ident.startswith("std")
+                               or ident.startswith("bleu") or ident.startswith("blu")
+                               or ident == "reglages" or ident.startswith("reg")
+                               or ident.startswith("rapporthist") or ident == "histfermer"):
+        vue_ecrire("")
+    if ident == "stop":
+        armer(addr, "la pastille")
+    elif ident == "go":
+        lever(addr, "la pastille")
+    elif ident == "revenir":
+        # USER a repose la pastille lui-meme depuis la poignee du bord. Sans
+        # cette levee, le garde la croirait encore ecartee et cesserait de la
+        # reposer si Android tuait le processus.
+        if os.path.exists(CACHEE):
+            os.remove(CACHEE)
+        print("pastille ramenee par USER", flush=True)
+        peindre(addr, etat_courant())
+    elif ident == "reglages":
+        vue_ecrire("reglages")
+        peindre(addr, etat_courant())
+    elif ident in ("regverrouon", "regverrouoff"):
+        # La ligne porte l'etat en cours : toucher « on » coupe, et inversement.
+        on = ident.endswith("off")
+        _bleu_ecrire(lire_verrouille=on)
+        print("lire verrouille : " + ("oui" if on else "non"), flush=True)
+        peindre(addr, etat_courant())
+    elif ident in ("regmainson", "regmainsoff"):
+        on = ident.endswith("off")
+        _bleu_ecrire(mains_libres=on)
+        regler_voix(addr, mains="1" if on else "0")
+        print("mains libres : " + ("oui" if on else "non"), flush=True)
+        peindre(addr, etat_courant())
+    elif ident == "reggain":
+        # Chaque appui passe au cran suivant, et le dernier revient a Normal.
+        crans = [v for v, _ in GAINS_BULLE]
+        g = gain_bulle()
+        g = crans[(crans.index(g) + 1) % len(crans)] if g in crans else 0
+        _bleu_ecrire(gain_bulle=g)
+        regler_voix(addr, gain=g)
+        print("volume bulle : {} mB".format(g), flush=True)
+        peindre(addr, etat_courant())
+    elif ident == "regfermer":
+        vue_ecrire("")
+        peindre(addr, etat_courant())
+    elif ident == "bleu":
+        vue_ecrire("bleu")
+        peindre(addr, etat_courant())
+    elif ident == "blufermer":
+        # Retour a Reglages, d'ou USER est venu : pas a la racine.
+        vue_ecrire("reglages")
+        peindre(addr, etat_courant())
+    elif ident.startswith("bleuval="):
+        # Le curseur relache. L'appli a deja peint : on ne fait qu'archiver,
+        # pour que le libelle du menu principal dise vrai au prochain passage.
+        pct = noter_bleu(ident.split("=", 1)[1])
+        print("lumiere bleue : {} % ({})".format(pct, bleu_mot(pct)), flush=True)
+        # On RESTE dans la vue : USER ajuste, regarde, reajuste.
+        peindre(addr, etat_courant())
+    elif ident in ("bleuautoon", "bleuautooff"):
+        on = ident.endswith("off")
+        basculer_bleu_auto(addr, on)
+        print("bleu auto : " + ("oui" if on else "non"), flush=True)
+        peindre(addr, etat_courant())
+    elif ident == "voixstandard":
+        vue_ecrire("standard")
+        peindre(addr, etat_courant())
+    elif ident == "stdfermer":
+        vue_ecrire("reglages")
+        peindre(addr, etat_courant())
+    elif ident.startswith("std") and ident[3:].isdigit():
+        i = int(ident[3:])
+        if 0 <= i < len(STANDARDS):
+            print("cerveau du standard : " + choisir_standard(STANDARDS[i][0]), flush=True)
+        # On reste dans la liste, comme pour Vitesse : le repere « en cours »
+        # se deplace et dit que le choix a pris.
+        peindre(addr, etat_courant())
+    elif ident == "voixvitesse":
+        vue_ecrire("vitesse")
+        peindre(addr, etat_courant())
+    elif ident == "vitfermer":
+        vue_ecrire("reglages")
+        peindre(addr, etat_courant())
+    elif ident.startswith("vit") and ident[3:].isdigit():
+        i = int(ident[3:])
+        if 0 <= i < len(DEBITS):
+            neuf = choisir_debit(DEBITS[i][0])
+            print("vitesse de la voix : " + neuf, flush=True)
+        # On RESTE dans la liste, et le repere « en cours » se deplace sur le
+        # palier choisi : c'est lui qui dit que le choix a pris. USER regle sa
+        # voix par essais successifs ; refermer l'obligeait a rouvrir la
+        # pastille et a redescendre dans Vitesse entre chaque essai. Il l'a
+        # signale le 2026-08-31. « Retour » reste la porte de sortie.
+        peindre(addr, etat_courant())
+    elif ident in ("voixmode", "voixmodeon", "voixmodeoff"):
+        # Traite ici, sans script : basculer un reglage doit etre instantane,
+        # et le menu doit deja porter le nouveau libelle au tour suivant.
+        neuf = basculer_mode_qg()
+        print("rapports du QG : " + neuf, flush=True)
+        peindre(addr, etat_courant())
+    elif ident == "masquer":
+        # Sans ce marqueur, la surveillance ci-dessous la reposerait dans les
+        # 20 s : un masquage voulu ne tenait pas plus qu'un tour de boucle.
+        toucher(CACHEE)
+        print("pastille masquee par USER", flush=True)
+    elif ident == "rapportsuite":
+        # Fait tourner la fenetre, en boucle : arrive au bout, elle revient au
+        # debut plutot que de laisser un bouton mort.
+        total = rapports_total()
+        suivant = decalage_lu() + 5
+        decalage_ecrit(0 if suivant >= total else suivant)
+        peindre(addr, etat_courant())
+    elif ident == "rapporthist":
+        hist_ecrire(HIST_PAS)
+        vue_ecrire("historique")
+        peindre(addr, etat_courant())
+    elif ident == "rapporthistplus":
+        # Page suivante : seulement si la liste affichee est pleine, sinon il
+        # n'y a plus rien a charger et on ne repeint pas pour rien.
+        n = hist_lignes()
+        if len(rapports_lus(n)) >= n:
+            hist_ecrire(n + HIST_PAS)
+            peindre(addr, etat_courant())
+    elif ident == "histfermer":
+        vue_ecrire("")
+        peindre(addr, etat_courant())
+    elif ident.startswith("rapportrej") and ident[10:].isdigit():
+        # Appui long sur un rapport puis « Supprimer » (USER, 2026-10-23) : le
+        # rapport est masque, qu'il soit en attente ou deja lu.
+        subprocess.run([QG_ATTENTE, "rejeter", ident[10:]], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("rapport supprime au doigt : " + ident[10:], flush=True)
+        peindre(addr, etat_courant())
+    elif ident.startswith("rapportsuppr") and ident[12:].isdigit():
+        # USER a balaye la ligne du doigt dans la pastille. « rejeter » et non
+        # « lu » : il n'a rien entendu du rapport, et le QG ne doit pas croire
+        # qu'il en a pris connaissance. Le menage des voix prefabriquees suit
+        # tout seul au tour d'apres, elles ne sont plus attendues.
+        rap = ident[12:]
+        # USER, 2026-10-22 : balayer un rapport en attente le MARQUE LU (il passe
+        # grise dans l'historique) ; balayer un rapport deja lu le MASQUE.
+        deja_lu = rap.isdigit() and int(rap) in [r[0] for r in rapports_lus(50)]
+        subprocess.run([QG_ATTENTE, "rejeter" if deja_lu else "lu", rap], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(("rapport masque au doigt : " if deja_lu else "rapport marque lu au doigt : ") + rap, flush=True)
+        peindre(addr, etat_courant())
+    elif ident.startswith("rapportlu") and ident[9:].isdigit():
+        # Un rapport deja lu, rejoue depuis l'historique du menu. Rien ne
+        # change d'etat s'il est coupe : voir fin_de_lecture (_rejeu).
+        _rejeu.add(ident[9:])
+        env_sup = dict(env_sup or {})
+        env_sup["QG_ID"] = ident[9:]
+        env_sup["QG_REJEU"] = "1"
+        executer(addr, "rapport", env_sup)
+        peindre(addr, etat_courant())
+    elif ident.startswith("rapport") and ident[7:].isdigit():
+        # Un bouton par rapport : l'id voyage dans le nom de la puce, faute de
+        # champ pour un argument dans le protocole du menu. Le script le
+        # recupere par l'environnement.
+        env_sup = dict(env_sup or {})
+        env_sup["QG_ID"] = ident[7:]
+        executer(addr, "rapport", env_sup)
+        peindre(addr, etat_courant())
+    elif ident == "rapport" and (env_sup or {}).get("QG_ID") \
+            and not (env_sup or {}).get("QG_SANS_VOIX"):
+        # Le rapport a la parole des maintenant, pas a la fin de rapport.sh :
+        # un bouton touche pendant ce temps sait quel rapport il vise, et la
+        # lecture auto ne lance rien par-dessus. rapportfini rend la main.
+        # Une lecture deja en vol garde la parole : rapport.sh refusera la
+        # seconde par son verrou, l'etat ne doit pas changer de rapport.
+        if tourne_encore("rapport"):
+            print("lecture deja en cours, appui ignore", flush=True)
+            return
+        qg_lecture.poser("LECTURE", env_sup["QG_ID"])
+        lancer(addr, ident, env_sup)
+    else:
+        # recstop est le meme bouton que rec, retourne : un seul script.
+        if ident == "recstop":
+            ident = "rec"
+        # Meme bouton, meme script : seuls l'icone et le libelle changent.
+        if ident == "voixannuler":
+            # Pendant que USER parle, la croix jette son audio : voix.sh
+            # l'enverrait. Pendant que le QG travaille, elle coupe le tour.
+            ident = "voix" if sous_etat_voix() == "travaille" else "voixraccrocher"
+        if not lancer(addr, ident, env_sup):
+            peindre(addr, etat_courant())
+            return
+    # Accuse de reception, sans quoi la pastille declare hote-1 muet au bout de
+    # 20 s : un script qui met une minute (synthese vocale, pull) ne renvoyait
+    # RIEN dans l'intervalle, et le badge « ! » mentait a chaque rapport lu.
+    # La station a recu l'appui ; c'est tout ce que l'appli demande de savoir.
+    peindre(addr, etat_courant())
+
+
+def lancer(addr, ident, env_sup=None):
+    """Lance actions/<ident>.sh en tache de fond. Faux si le script manque."""
+    script = os.path.join(ACTIONS, ident + ".sh")
+    if not os.path.exists(script):
+        print("action inconnue : " + ident, flush=True)
+        return False
+    print("action " + ident, flush=True)
+    # Le stderr des actions partait a DEVNULL : une action qui echouait ne
+    # laissait AUCUNE trace, ni ici ni ailleurs. On le garde dans un fichier
+    # par action, ecrase a chaque appui, relisible tout de suite apres.
+    trace = os.path.join(TRACES, ident + ".log")
+    try:
+        os.makedirs(TRACES, exist_ok=True)
+        sortie = open(trace, "w")
+    except OSError:
+        sortie = subprocess.DEVNULL
+    env = None
+    if env_sup:
+        env = dict(os.environ)
+        env.update(env_sup)
+    _EN_COURS[ident] = subprocess.Popen(["bash", script, addr],
+                                        stdout=sortie, stderr=subprocess.STDOUT,
+                                        env=env)
+    return True
+
+
+# Les boutons de reponse au-dessus de la bulle, avec l'id de ce qu'ils
+# visent : « voixb1:1375 » pour le rapport 1375, « voixoui:t412 » pour un
+# tour du standard. Un telephone d'avant la 2.21 les envoie sans id.
+# ecrire:<texte hex>[:<mode>:<conversation>][:qg]. Le texte peut etre vide
+# (mode « repondre » d'un toucher). Les 2.45 a 2.47 envoient la forme courte.
+ECRIRE = re.compile(r"ecrire:([0-9a-f]{0,4000})(?::(question|repondre|resumer|traduire):([0-9a-f]{6}))?(:qg)?")
+BOUTON_VOIX = re.compile(r"voix(oui|non|detail|b[1-3])(?::([a-z0-9]{1,12}))?")
+_APPUIS_VOIX = {}
+
+
+def double_appui(ident):
+    t = _APPUIS_VOIX.get(ident)
+    _APPUIS_VOIX[ident] = time.time()
+    return t is not None and time.time() - t < DOUBLON_S
+
+
+def statut_rapport(ident):
+    """Le statut d'un rapport dans la file, None s'il n'existe pas."""
+    try:
+        import sqlite3
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=1.0)
+        r = c.execute("SELECT statut FROM attente WHERE id=?", (ident,)).fetchone()
+        c.close()
+        return r[0] if r else None
+    except Exception:
+        return None
+
+
+def bouton_voix(addr, ident, mot, pour):
+    """Un bouton de reponse touche : un tour du standard pour CE qu'il vise.
+
+    Bug du 2026-10-06 : « voixb1 » sous le rapport 1375 partait pendant que
+    1376 etait deja lu. voixtour.sh relisait /tmp/pixel-voix-rapport, que
+    rapport.sh venait de reecrire pour 1376 : la reponse est allee au mauvais
+    topic. L'id voyage maintenant avec l'appui, et rien ne le relit sur disque.
+    """
+    lec = qg_lecture.lire()
+    if not pour:
+        # Telephone d'avant la 2.21 : le bouton vise ce qui vient d'etre lu.
+        if lec["etat"] in ("FENETRE", "LECTURE") and lec["id"]:
+            pour = lec["id"]
+        elif mot.startswith("b"):
+            print("bouton {} sans id ni lecture en cours, ignore".format(ident), flush=True)
+            return
+    if pour and lec["etat"] == "TOUR" and lec["id"] == pour:
+        print("bouton {} : un tour tourne deja pour {}, ignore".format(ident, pour), flush=True)
+        return
+    # Bouton perime : ses libelles ont disparu, ou son rapport a ete ecarte.
+    if mot.startswith("b") and not os.path.exists(
+            os.path.join(QG_VOIX, "{}.libelles".format(pour))):
+        print("bouton {} perime : libelles absents, ignore".format(ident), flush=True)
+        return
+    if pour.isdigit() and statut_rapport(pour) in (None, "rejete"):
+        print("bouton {} perime : rapport {} absent ou ecarte, ignore".format(
+            ident, pour), flush=True)
+        return
+    qg_lecture.poser("TOUR", pour)
+    env = {"VOIX_CHOIX_ID": pour}
+    if pour.isdigit():
+        env["VOIX_RAPPORT"] = pour
+    print("bouton {} vise {}".format(mot, pour or "le dernier tour"), flush=True)
+    lancer(addr, "voix" + mot, env)
+
+
+_refus = {}   # id -> instants des refus du telephone (garde-fou anti-boucle)
+_rejeu = set()   # ids rejoues depuis l'historique : un rejeu coupe ne remet rien en file
+
+
+ARRET_VOLONTAIRE_S = 5
+
+
+def repousser_voix(ident):
+    """Remet la voix d'un rapport lu sur le telephone, pour la rejouer vite.
+
+    USER, 2026-10-22 : toucher un rapport de l'historique devait lire tout de
+    suite. Le telephone efface son mp3 a la fin du son, et le repousser a
+    l'appui coutait ~2 s d'adb. On le repose donc des la fin de la lecture,
+    en fond, apres que l'appli a fini de ranger le sien.
+    """
+    src = os.path.join(QG_VOIX, "{}.mp3".format(ident))
+    if not ident.isdigit() or not os.path.exists(src):
+        return
+
+    def tache():
+        time.sleep(4)
+        addr = adresse()
+        if not addr or os.path.exists(STOP):
+            return
+        try:
+            subprocess.run([ADB, "-s", addr, "push", src,
+                            "/sdcard/Android/data/com.poste.pixelgarde/files/voix/"
+                            "qg-pre-{}.mp3".format(ident)],
+                           check=False, timeout=30,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            open(os.path.join(QG_VOIX, "{}.pousse".format(ident)), "a").close()
+        except Exception:
+            pass
+    threading.Thread(target=tache, daemon=True).start()
+
+
+def fin_de_lecture(quoi, ident):
+    """rapportfini, rapportcoupe ou rapportrefuse : le telephone rend compte.
+
+    L'etat ne bouge que s'il porte encore sur CE rapport : un bouton touche
+    pendant la lecture a deja pose TOUR, et la fin du son ne doit pas l'effacer.
+    """
+    lec = qg_lecture.lire()
+    le_meme = lec["etat"] == "LECTURE" and lec["id"] == ident
+    if ident in _rejeu and quoi != "fini":
+        # Rejeu coupe ou refuse : le rapport est deja lu, il ne retourne pas
+        # en tete de file et ne compte pas dans le garde-fou des refus.
+        _rejeu.discard(ident)
+        if le_meme:
+            qg_lecture.poser("LIBRE", ident)
+        print("rejeu du rapport {} {}".format(ident, quoi), flush=True)
+        return
+    _rejeu.discard(ident)
+    if quoi == "fini":
+        # Lu et ecoute ici, a la fin du son, et plus au depart : un rapport
+        # coupe a mi-chemin n'est pas un rapport entendu.
+        subprocess.run([QG_ATTENTE, "entendu", ident], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if le_meme:
+            qg_lecture.poser("FENETRE", ident)
+        print("rapport {} entendu en entier".format(ident), flush=True)
+        repousser_voix(ident)
+        return
+    # Arreter, c'est arreter. USER, 2026-10-13 a 17:12 : 2 appuis sur
+    # « Arreter » pendant le rapport 2499, et 2 fois il est reparti 6 s plus
+    # tard. Le telephone dit « rapportcoupe » pour le bouton comme pour une
+    # panne, et sans APK on ne peut pas changer ce mot. La duree tranche :
+    # une panne coupe dans les premieres secondes (fichier absent, lecteur
+    # qui refuse), un appui de USER vient apres qu'il a entendu le debut.
+    # Coupe apres ARRET_VOLONTAIRE_S de lecture : le rapport sort de la file,
+    # sans etre marque entendu. Son texte reste dans le QG.
+    if quoi == "coupe" and le_meme and time.time() - float(lec.get("depuis") or 0) >= ARRET_VOLONTAIRE_S:
+        subprocess.run([QG_ATTENTE, "lu", ident], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        qg_lecture.tete_retirer(ident)
+        qg_lecture.poser("LIBRE", ident)
+        print("rapport {} arrete par USER apres {:.0f} s : sorti de la file, pas rejoue".format(
+            ident, time.time() - float(lec.get("depuis") or 0)), flush=True)
+        return
+    # Garde-fou du 2026-10-08 : le telephone refusait le rapport 1772 en
+    # 1 s, a chaque fois. Remis en tete, il repartait 16 s plus tard, et
+    # chaque depart postait sa voix dans le QG : 23 audios d'affilee. Au 2e
+    # refus du meme rapport en 30 min, il sort de la file. Son texte et une
+    # voix sont deja dans le QG.
+    if quoi != "coupe":
+        maintenant = time.time()
+        vus = [t for t in _refus.get(ident, []) if maintenant - t < 1800]
+        vus.append(maintenant)
+        _refus[ident] = vus
+        if len(vus) >= 2:
+            subprocess.run([QG_ATTENTE, "lu", ident], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if le_meme:
+                qg_lecture.poser("FENETRE", ident)
+            print("rapport {} refuse {} fois par le telephone : sorti de la "
+                  "file, plus de relance".format(ident, len(vus)), flush=True)
+            return
+    # Coupe ou refuse : il reste nouveau et repasse le premier. Sa voix sera
+    # repoussee, le telephone a pu l'effacer.
+    qg_lecture.tete_poser(ident)
+    try:
+        os.remove(os.path.join(QG_VOIX, "{}.pousse".format(ident)))
+    except OSError:
+        pass
+    if le_meme:
+        qg_lecture.poser("LIBRE" if quoi == "coupe" else "FENETRE", ident)
+    print("rapport {} {} : remis en tete de file".format(
+        ident, "coupe" if quoi == "coupe" else "refuse par le telephone"), flush=True)
+
+
+def peindre(addr, etat):
+    """Repeindre la pastille SANS attendre : elle informe, elle ne bloque pas.
+
+    Un `adb shell` coute 0,3 s. Le payer a chaque changement d'etat rendrait
+    tout pilotage deux fois plus lent, pour une information cosmetique. On tire
+    et on oublie ; si la diffusion se perd, le tour suivant la rejoue.
+    """
+    # Masquee par USER : on ne repose RIEN. Le 2026-09-07, l'appui sur Masquer
+    # etait suivi d'une repeinture une demi-seconde apres, et la pastille
+    # revenait sous son doigt. Seul `revenir` retire le marqueur.
+    if os.path.exists(CACHEE):
+        return
+    cmd = ("am broadcast -n {}/.Recepteur -a {} --es etat {} --es menu '{}'"
+           " --es tetes '{}'"
+           .format(APPLI, ACT_BULLE, etat, menu_bulle(), tetes()))
+    subprocess.Popen([ADB, "-s", addr, "shell", cmd],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def notifier(addr):
+    """Repeint la pastille avec l'etat courant.
+
+    Il y avait ici une notification permanente, retiree le 2026-08-24 : la
+    pastille porte deja la couleur et le bouton ARRETER, et USER ne veut pas
+    d'une ligne de plus dans son volet. Les notifications de l'appli sont
+    coupees cote telephone par appops, ce qui supprime du meme coup
+    l'avertissement systeme "s'affiche par-dessus les autres applications".
+    Pour la faire revenir : appops POST_NOTIFICATION allow, puis diffuser
+    ACT_SHOW (le code Java du Recepteur est intact).
+    """
+    peindre(addr, etat_courant())
+
+
+# PIEGE, pour qui voudrait alleger la veille ci-dessous : `dumpsys window
+# tokens` ne dit PAS si la pastille est posee. Il compte le paquet meme quand
+# plus aucune fenetre ne l'est. Seul `dumpsys window windows` repond juste.
+
+
+_qg_dernier_muet = 0.0
+
+
+def voix_active():
+    """Une conversation vocale est-elle VRAIMENT en cours ?
+
+    Le marqueur seul ment : il survit a une bulle fermee, un ecran coupe, un
+    telephone hors reseau. On le croise donc avec l'age du sous-etat, qui est
+    reecrit a chaque etape d'un tour.
+    """
+    if not os.path.exists(VOIX):
+        return False
+    try:
+        age = time.time() - os.path.getmtime(
+            VOIX_ETAT if os.path.exists(VOIX_ETAT) else VOIX)
+    except OSError:
+        return True
+    if age < VOIX_PEREMPTION_S:
+        return True
+    print("marqueur de conversation perime ({:.0f} min), retire".format(
+        age / 60), flush=True)
+    for f in (VOIX, VOIX_ETAT):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    return False
+
+
+# Quel rapport on attend, et depuis quand. La lecture auto laisse a la voix
+# prefabriquee le temps d'arriver, sans jamais bloquer plus de 30 s.
+_qg_attente_voix = [None, 0.0]
+
+
+def prefabriquer_voix(addr):
+    """Fabrique d'avance la voix des rapports en attente.
+
+    USER a chronometre l'appui le 2026-08-29 : quatre a dix secondes de silence
+    entre son doigt et le son, alors que le rapport etait deja ecrit. Le temps
+    partait entierement dans edge-tts, appele au moment de l'appui. On le paye
+    maintenant a l'arrivee du rapport, pendant qu'il fait autre chose.
+
+    Tire et oublie : le sous-processus vit sa vie, un echec ne coute qu'un appui
+    a l'ancienne vitesse. Seuls les rapports visibles dans le menu sont
+    prefabriques, pas toute la file.
+    """
+    if os.path.exists(STOP):
+        return
+    attendus = set()
+    # USER, 2026-10-22 : toucher un rapport de l'historique (les 3 lus) mettait
+    # ~18 s a parler, la voix et le resume ayant ete jetes a la lecture. Les
+    # lus de l'historique gardent donc leur voix, comme les rapports en file.
+    ordre = [(i, s, t) for i, s, t in rapports_liste(
+        int(_qg_reglage("prefabrique_max", 5)))]
+    ordre += [(i, s, t) for i, s, t in rapports_lus(3)]
+    for ident, _sujet, _titre in ordre:
+        attendus.add(str(ident))
+        if os.path.exists(os.path.join(QG_VOIX, "{}.ogg".format(ident))):
+            continue
+        # stderr n'est PAS jete : « voix prete pour le rapport N » atterrit dans
+        # le journal du garde, seul endroit ou l'on voit si la prefabrication
+        # suit le rythme des rapports.
+        subprocess.Popen([PREVOIX, str(ident), addr],
+                         stdout=subprocess.DEVNULL)
+    # Un rapport rejete ou lu ailleurs laisse sa voix derriere lui : sans ce
+    # menage, le dossier grossit d'un mp3 par rapport jamais ecoute.
+    try:
+        for f in os.listdir(QG_VOIX):
+            tete = f.split(".")[0]
+            chemin = os.path.join(QG_VOIX, f)
+            # Les libelles et le choix d'un rapport servent encore aux boutons
+            # affiches sous lui apres sa lecture, alors qu'il n'est plus dans
+            # la file. Ils vivent 1 h, puis le bouton est perime.
+            recent = time.time() - os.path.getmtime(chemin) < 3600
+            if f.endswith((".libelles", ".choix")):
+                if not recent and (tete.isdigit() or tete[:1] == "t"):
+                    os.remove(chemin)
+                continue
+            # Seuls les fichiers nommes d'apres un id sont a nous : un nom qui
+            # n'est pas un nombre appartient a quelqu'un d'autre, on le laisse.
+            if tete.isdigit() and tete not in attendus:
+                os.remove(chemin)
+    except OSError:
+        pass
+
+
+# Ce qui occupe vraiment l'oreille. Un bip de notification ou un retour
+# haptique passent aussi par le moteur audio, mais attendre leur fin n'aurait
+# aucun sens : ils durent moins longtemps que le tour de garde.
+_USAGES_OCCUPANTS = ("USAGE_VOICE_COMMUNICATION", "USAGE_ALARM",
+                     "USAGE_ASSISTANT")
+
+# Musique et video ne bloquent plus (USER, 2026-10-05 : « les rapports ne se
+# lisent pas quand je joue de la musique ou une video »). Le service Voix
+# prend le focus en GAIN_TRANSIENT_MAY_DUCK : Android baisse le son des
+# autres applis le temps du rapport, puis le remonte. Seules ces applis
+# gardent la voie : une note vocale Telegram s'ecoute (bug du 2026-10-02),
+# et notre propre voix ne se coupe pas elle-meme.
+_USAGES_FOND = ("USAGE_MEDIA", "USAGE_GAME")
+_APPLIS_PROTEGEES = ("org.telegram.messenger", "org.telegram.messenger.web",
+                     "com.poste.pixelgarde")
+
+
+_flux_vu = [0.0]
+
+
+def audio_occupe(addr):
+    """USER ecoute-t-il deja quelque chose ? None si la question reste sans reponse.
+
+    Deux sources, lues en un seul appel :
+    - `dumpsys audio` : un flux `started` d'usage occupant. `paused` est une
+      video en pause, `stopped` un lecteur qui a fini.
+    - `dumpsys media_session` : une session en PLAYING ou BUFFERING. Telegram
+      garde sa session en PLAYING entre 2 notes vocales enchainees, alors que
+      son flux audio passe un instant a l'arret. C'est ce qui permet un
+      silence court (3 s) sans couper une suite de notes. Notre propre appli
+      est exclue : sa session est la voix qu'on s'apprete a jouer.
+    Une session peut rester figee en PLAYING apres un plantage. Elle ne
+    compte donc que si un vrai flux a joue dans les 10 dernieres secondes.
+    """
+    try:
+        r = sh(addr, "dumpsys audio | grep -E "
+                     "'AudioPlaybackConfiguration.*state:started'; echo ===; "
+                     "dumpsys media_session | grep -E "
+                     "'package=|state=PlaybackState'; echo ===; "
+                     "cmd package list packages -U | grep -E '"
+                     + "|".join(_APPLIS_PROTEGEES) + "'", timeout=12)
+    except Exception:                       # noqa: BLE001
+        return None
+    audio, _, reste = r.stdout.partition("===")
+    sessions, _, paquets = reste.partition("===")
+    uids = set()
+    for ligne in paquets.split():
+        if ligne.startswith("uid:"):
+            uids.update(ligne[4:].split(","))
+    for ligne in audio.splitlines():
+        m = re.search(r"u/pid:(\d+)/", ligne)
+        uid = m.group(1) if m else ""
+        if any(u in ligne for u in _USAGES_OCCUPANTS) or (
+                uid in uids and any(u in ligne for u in _USAGES_FOND)):
+            _flux_vu[0] = time.time()
+            return True
+    if time.time() - _flux_vu[0] > 10:
+        return False
+    paquet = ""
+    for ligne in sessions.splitlines():
+        ligne = ligne.strip()
+        if ligne.startswith("package="):
+            paquet = ligne[len("package="):]
+        elif ("state=PLAYING" in ligne or "state=BUFFERING" in ligne) \
+                and paquet in _APPLIS_PROTEGEES \
+                and paquet != "com.poste.pixelgarde":
+            return True
+    return False
+
+
+_silence_depuis = [None]
+
+
+def silence_stable(addr):
+    """La voie est-elle libre depuis assez longtemps pour parler ?
+
+    Bug du 2026-10-02 : USER ecoutait une note vocale Telegram. Le rapport 801
+    a ete mis de cote a 19:05:42, puis joue 3 s plus tard : un seul tour de
+    garde a trouve la voie libre, dans le creux entre deux notes. Un instant
+    de silence ne veut pas dire que USER a fini d'ecouter. On exige donc un
+    silence continu, regle par `silence_s` (3 s par defaut). USER a trouve 15 s
+    trop long : la session media de Telegram couvre desormais les creux.
+    """
+    if audio_occupe(addr) is not False:     # occupe, ou injoignable
+        _silence_depuis[0] = None
+        return False
+    if _silence_depuis[0] is None:
+        _silence_depuis[0] = time.time()
+    return time.time() - _silence_depuis[0] >= int(_qg_reglage("silence_s", 3))
+
+
+def texte_lu_en_cours(addr):
+    """Un texte copie ou l'ecran est-il en cours de lecture sur le telephone ?
+
+    USER, 2026-10-23 : « quand je fais lire un texte copie et qu'un rapport se
+    joue, ca le coupe, il devait attendre dans le creeper ». Lecteur.java
+    pose files/lecteur-actif et le retouche a chaque phrase. Frais (moins de
+    20 min) = un texte est lu, en pause ou non : le rapport attend.
+    """
+    try:
+        r = sh(addr, "f=/sdcard/Android/data/com.poste.pixelgarde/files/lecteur-actif; "
+                     "[ -e $f ] && echo $(( $(date +%s) - $(stat -c %Y $f) ))", timeout=8)
+        return int(r.stdout.strip()) < 1200
+    except Exception:                       # noqa: BLE001
+        return False
+
+
+def lire_verrouille():
+    """L'option « Lire verrouille » des Reglages (2026-10-10), coupee par defaut."""
+    return bool(_qg_reglage("lire_verrouille", False))
+
+
+def mains_libres():
+    """L'option « Mains libres » des Reglages (2026-10-12), coupee par defaut.
+
+    Pour conduire : le micro se rouvre seul, le silence envoie, les boutons
+    sont dits a voix haute, les rapports se lisent meme ecran verrouille.
+    """
+    return bool(_qg_reglage("mains_libres", False))
+
+
+# « Volume bulle » : gain ajoute a la voix de la bulle, en millibels. Android
+# n'a pas de volume par appli : la bulle et SoundCloud partagent le volume
+# multimedia. Monter la bulle seule revient a baisser le reste (2026-10-12).
+GAINS_BULLE = ((0, "Normal"), (600, "+6 dB"), (1200, "+12 dB"))
+
+
+def gain_bulle():
+    try:
+        return int(_qg_reglage("gain_bulle", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def regler_voix(addr, **extras):
+    """Pousse un reglage de la voix dans l'appli (Recepteur, REGLAGE)."""
+    cmd = "am broadcast -n {}/.Recepteur -a com.poste.pixel.REGLAGE".format(APPLI)
+    cmd += "".join(" --es {} {}".format(k, v) for k, v in extras.items())
+    subprocess.Popen([ADB, "-s", addr, "shell", cmd],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+_CASQUE_ADB = ("headset", "headphone", "bt_a2dp", "ble_headset", "usb_headset")
+
+
+def casque_branche(addr):
+    """Des ecouteurs (ou l'autoradio Bluetooth) sont-ils la sortie du son ?
+
+    L'appli 2.35 le dit au relais (`casque=`). Etat frais de moins de 40 s :
+    il fait foi. Sinon, repli adb sur la sortie de STREAM_MUSIC.
+    """
+    try:
+        if time.time() - os.path.getmtime(RELAIS_ETAT) < 40:
+            etat = open(RELAIS_ETAT).read()
+            if "casque=" in etat:
+                return "casque=1" in etat
+    except OSError:
+        pass
+    try:
+        r = sh(addr, "dumpsys audio | grep -A12 -- '- STREAM_MUSIC:'"
+                     " | grep -m1 'Devices:'", timeout=12)
+    except Exception:                       # noqa: BLE001
+        return False
+    return any(m in r.stdout for m in _CASQUE_ADB)
+
+
+def indisponible(addr):
+    """Le telephone est-il hors d'etat d'ecouter ? None si sans reponse.
+
+    Vrai quand l'ecran dort, et vrai aussi quand il est allume mais verrouille.
+    Signale par USER le 2026-08-30 en deux temps : d'abord « quand mon ecran est
+    eteint ca ne devrait pas lancer la lecture », puis « meme l'ecran doit etre
+    deverrouille ». Un ecran de verrouillage, c'est un coup d'oeil en passant,
+    pas quelqu'un qui ecoute : le rapport y parlerait dans le vide autant qu'a
+    une poche.
+
+    Les deux mesures partent dans un seul aller-retour ADB. Le canal passe par
+    Tailscale, chaque question coute une seconde, et ce tour de garde repasse
+    toutes les cinq.
+
+    mWakefulness plutot que mScreenState : ce dernier annonce ON pendant
+    l'affichage permanent, ou l'ecran est noir et le telephone pose.
+    deviceLocked se lit sur la ligne marquee (current) : le profil « Private
+    space » a la sienne, avec son propre verrou, et la confondre avec la
+    session de USER ferait attendre un rapport pour rien.
+    """
+    # L'appli dit elle-meme ecran et verrou au relais (Creeper 2.19). Un etat
+    # de moins de 40 s fait foi : il marche sans ADB, et sans un aller-retour.
+    try:
+        if time.time() - os.path.getmtime(RELAIS_ETAT) < 40:
+            etat = open(RELAIS_ETAT).read()
+            if "ecran=" in etat:
+                return "ecran=1 verrou=0" not in etat
+    except OSError:
+        pass
+    try:
+        r = sh(addr, "dumpsys power 2>/dev/null | grep -m1 'mWakefulness='; "
+                     "dumpsys trust 2>/dev/null | grep -m1 '(current)'", timeout=12)
+    except Exception:                       # noqa: BLE001
+        return None
+    sortie = r.stdout.strip()
+    if not sortie:
+        return None
+    if "Awake" not in sortie:
+        return True
+    # Une ligne (current) absente n'autorise rien : mieux vaut un rapport qui
+    # attend qu'un rapport qui parle a un ecran de verrouillage.
+    for ligne in sortie.splitlines():
+        if "(current)" in ligne:
+            return "deviceLocked=0" not in ligne
+    return True
+
+
+_attente_raison = [None]
+
+
+def _attente(raison):
+    """Dit une fois, a chaque changement, pourquoi un rapport pret ne part pas.
+
+    USER, 2026-10-10 : « les rapports ne se lancent pas tout seuls ». Le rapport
+    2187 a attendu 11 min sans une ligne au journal : chaque garde rendait la
+    main en silence, impossible de savoir laquelle.
+    """
+    if raison != _attente_raison[0]:
+        _attente_raison[0] = raison
+        if raison:
+            print("lecture auto retenue : " + raison, flush=True)
+
+
+def lecture_auto(addr):
+    """Lire le rapport suivant, quand personne n'a la parole.
+
+    Le 2026-08-28, USER a laisse le mode silencieux arme et n'a plus rien recu
+    pendant des heures : le resume ECRIT etait bloque avec le son. Un mode
+    silencieux coupe le son, pas l'information. Le texte part donc toujours
+    dans le QG ; seules la bulle vocale et la lecture sur le telephone
+    dependent du mode. Idem pendant une conversation vocale : on ne coupe pas
+    la parole a USER, mais on peut lui ecrire.
+
+    Revue du 2026-10-06 : la cadence suivait la stabilite de la file, pas la
+    fin de la voix. Trois rapports arrives pendant une lecture partaient l'un
+    sur l'autre. On ne decide plus qu'en LIBRE : apres rapportfini, le
+    rapport laisse regroupe_s a USER pour toucher un bouton (FENETRE), puis
+    seulement le suivant part.
+
+    Seul l'arret d'urgence est souverain et bloque tout.
+    """
+    if os.path.exists(STOP):
+        # Un verrou qui fait taire un service doit le DIRE. Le 2026-08-27,
+        # l'arret d'urgence est reste arme deux heures : USER a cru que la
+        # chaine etait cassee alors qu'elle etait simplement bailonnee.
+        # Une ligne par minute au plus, sinon le journal devient illisible.
+        n_att, _ = rapports_en_attente()
+        if n_att:
+            global _qg_dernier_muet
+            if time.time() - _qg_dernier_muet > 60:
+                _qg_dernier_muet = time.time()
+                print("{} rapport(s) en attente, NON lus : ARRET D'URGENCE"
+                      " arme".format(n_att), flush=True)
+        return
+    if qg_lecture.lire()["etat"] != "LIBRE":
+        return
+    # En pleine conversation vocale, le rapport attend que USER ait la parole
+    # (etat `pret`), puis il est DIT dans la conversation, sans la fermer.
+    # Bug du 2026-10-01 : il partait « sans lecture » et etait marque lu, USER
+    # ne l'entendait jamais. Un compte a rebours d'envoi pose TOUR, donc il
+    # est deja exclu par la ligne du dessus.
+    dans_conv = voix_active()
+    if dans_conv and sous_etat_voix() != "pret":
+        if rapports_en_attente()[0]:
+            _attente("conversation ouverte, voix " + str(sous_etat_voix()))
+        return
+    sans_voix = mode_qg() != "continu" and not dans_conv
+    # Une lecture deja en vol : ne rien decider tant qu'elle n'a pas rendu la
+    # main, sinon on relit ce qu'elle est en train de lire.
+    if tourne_encore("rapport"):
+        return
+    n, _ = rapports_en_attente()
+    if not n:
+        return
+    if not sans_voix:
+        # Le rapport parle : ecran allume et deverrouille, et un silence qui
+        # dure. Bug du 2026-10-06 : ecran eteint, il etait marque lu quand
+        # meme et mis de cote dans un differe a une seule place. Il reste
+        # maintenant « nouveau » dans la file, et part au reveil.
+        dispo = indisponible(addr)
+        if dispo is None:
+            _attente("telephone injoignable")
+            return
+        # Exceptions demandees par USER le 2026-10-10 : « meme si mon Pixel est
+        # verrouille ca doit jouer, il doit y avoir une option pour ca, et si
+        # j'ai mes ecouteurs ca doit jouer automatiquement ». Des ecouteurs
+        # sur les oreilles, c'est quelqu'un qui ecoute, pas une poche.
+        if dispo and not (lire_verrouille() or mains_libres() or casque_branche(addr)):
+            _attente("ecran eteint ou verrouille, sans ecouteurs")
+            return
+        if texte_lu_en_cours(addr):
+            _silence_depuis[0] = None
+            _attente("texte lu en cours, le rapport attend")
+            return
+        if not silence_stable(addr):            # occupe, ou pas assez longtemps libre
+            if _silence_depuis[0] is None:
+                _attente("son en cours sur le telephone (ou pas de reponse)")
+            return
+    # Un seul rapport par tour, le plus ancien. USER a tranche le 2026-08-29 :
+    # le groupage gommait le detail de chaque chantier. Un rapport coupe en
+    # pleine lecture repasse avant tous les autres.
+    vieux = None
+    for t in qg_lecture.tete_lire():
+        if statut_rapport(t) == "nouveau":
+            vieux = t
+            break
+        qg_lecture.tete_retirer(t)
+    if vieux is None:
+        vieux = plus_ancien_en_attente()
+    # Attendre que la voix prefabriquee soit prete plutot que de partir sans
+    # elle : sinon rapport.sh refait edge-tts et USER reattend ses cinq
+    # secondes. Au-dela de la limite reglee, le rapport part quand meme,
+    # en texte et en voix fabriquee a chaud : mieux vaut ca qu'un silence.
+    if vieux and not sans_voix and not os.path.exists(
+            os.path.join(QG_VOIX, "{}.ogg".format(vieux))):
+        if _qg_attente_voix[0] != vieux:
+            _qg_attente_voix[0] = vieux
+            _qg_attente_voix[1] = time.time()
+        # La prefabrication compte une condensation en plus de la
+        # synthese depuis que le rapport est resume avant d'etre dit.
+        if time.time() - _qg_attente_voix[1] < int(
+                _qg_reglage("attente_voix_s", 45)):
+            _attente("voix du rapport {} pas encore prete".format(vieux))
+            return
+    _qg_attente_voix[0] = None
+    _silence_depuis[0] = None
+    _attente(None)
+    env = {"QG_SANS_VOIX": "1"} if sans_voix else {"QG_AUTO": "1"}
+    if vieux:
+        env["QG_ID"] = str(vieux)
+    if dans_conv:
+        env["QG_DANS_CONVERSATION"] = "1"
+    print("lecture auto d'un rapport{}{}".format(
+        " #{}".format(vieux) if vieux else "",
+        " (dans la conversation)" if dans_conv
+        else " (sans lecture)" if sans_voix else ""), flush=True)
+    executer(addr, "rapport", env)
+
+
+def veiller(addr, stop_evt):
+    """Le tour de garde lent : rattraper les appuis, et reposer la pastille.
+
+    Deux besoins, un seul aller-retour adb, parce qu'un aller-retour coute
+    0,3 s et que les payer separement doublait la facture pour rien.
+
+      - toutes les 5 s : relire le fichier de commande depose par la pastille.
+        C'est le filet sous le flux logcat, qui perd tout pendant une coupure.
+      - toutes les 20 s : verifier que la pastille est encore posee. Complement
+        du receveur de demarrage cote telephone : celui-la couvre le
+        redemarrage, celui-ci couvre la mort du processus en cours de route.
+    """
+    tour = 0
+    echecs = 0
+    lire_maintenant = True
+    while lire_maintenant or not stop_evt.wait(timeout=5):
+        lire_maintenant = False   # a la connexion, on lit sans attendre 5 s
+        tour += 1
+        prefabriquer_voix(addr)
+        lecture_auto(addr)
+        cmd = "cat {} 2>/dev/null".format(CMD_TEL)
+        veut_pastille = tour % 4 == 0 and not os.path.exists(CACHEE)
+        if veut_pastille:
+            cmd += "; echo '---'; dumpsys window windows | grep -c pixelgarde"
+        try:
+            r = sh(addr, cmd, timeout=20)
+            depot, _, compte = r.stdout.partition("---")
+            rattraper(addr, depot)
+            if veut_pastille and compte.strip().startswith("0"):
+                print("pastille disparue, reposee", flush=True)
+                notifier(addr)
+            echecs = 0
+        except Exception as e:              # noqa: BLE001
+            echecs += 1
+            print("veille : {}".format(e), flush=True)
+            # Trois lectures ratees d'affilee (~60 s) : l'adresse ne repond
+            # plus. Les oreilles logcat, elles, peuvent rester ouvertes des
+            # minutes sur un socket mort : sans ce compteur le garde attendait
+            # que ce soit ELLES qui tombent en rafale, et USER appuyait dans le
+            # vide pendant 7 minutes apres un passage du Wi-Fi a la 4G.
+            if echecs >= 3:
+                print("veille muette 3 fois, on reprend l'adresse", flush=True)
+                try:
+                    os.unlink(os.path.join(PIXEL_TMP, "pixel-adresse"))
+                except OSError:
+                    pass
+                stop_evt.set()
+                return
+
+
+def vibrer(addr):
+    sh(addr, "cmd vibrator_manager synced oneshot 400", timeout=10)
+
+
+def armer(addr, source):
+    """Arme l'arret ET signe le temoin.
+
+    La signature compte : `pixel go` refuse de lever un arret pose par USER.
+    Sans elle, un agent bloque pourrait poliment se rendre la main.
+    """
+    with _verrou:
+        if os.path.exists(STOP):
+            peindre(addr, etat_courant())
+            return
+        with open(STOP, "w") as f:
+            f.write("pastille" if "bouton" in source or "pastille" in source
+                    else "volume" if "Volume" in source else "poste")
+    print("ARRET D'URGENCE arme par " + source, flush=True)
+    # L'arret coupe aussi ce qui parle deja. Revue du 2026-10-06 : il ne
+    # bloquait que les lectures a venir, la voix en cours et un compte a
+    # rebours d'envoi continuaient. Le service Voix connait les trois ordres.
+    for ordre in ("VOIXTAIRE", "ENVOIANNULE", "VOIXFIN"):
+        try:
+            sh(addr, "am start-foreground-service -n com.poste.pixelgarde/.Voix "
+                     "-a com.poste.pixel." + ordre, timeout=10)
+        except Exception as e:              # noqa: BLE001
+            print("arret : {} impossible ({})".format(ordre, e), flush=True)
+    qg_lecture.poser("LIBRE")
+    vibrer(addr)
+    notifier(addr)
+
+
+def lever(addr, source):
+    with _verrou:
+        if not os.path.exists(STOP):
+            peindre(addr, etat_courant())
+            return
+        os.remove(STOP)
+    print("arret d'urgence leve par " + source, flush=True)
+    vibrer(addr)
+    notifier(addr)
+
+
+def flux(addr, cmd):
+    return subprocess.Popen([ADB, "-s", addr] + cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+
+
+def oreille_tactile(addr, stop_evt):
+    """Le tactile : met le garde en pause quand USER touche, et guide l'oeil du Creeper.
+
+    Android cache a l'appli la position d'un toucher dans une autre appli, mais
+    le garde la lit ici. Elle part en permilles d'ecran dans files/regard.txt,
+    par un shell adb tenu ouvert (un `adb shell` par toucher coutait 100 ms).
+
+    Trois defauts mesures le 2026-10-07 (la tete se bloquait) :
+    - le shell d'ecriture mourait (BrokenPipe) et ne se rouvrait jamais ;
+    - le plafond de 25/s jetait la derniere position d'un geste ;
+    - un doigt immobile n'emet rien : la tete retombait au neutre en 1,5 s.
+    Le fil `battement` regle les trois : il rouvre le canal, envoie la position
+    en attente, et la repete toutes les 0,4 s tant que le doigt est pose.
+    """
+    proc = flux(addr, ["shell", "getevent", TACTILE])
+    verrou = threading.Lock()
+    fini = threading.Event()
+    e = {"oeil": None, "ouvre": 0.0, "x": -1, "y": -1, "bas": False,
+         "envoi": 0.0, "attente": False}
+
+    def ouvrir():
+        e["ouvre"] = time.time()
+        try:
+            o = subprocess.Popen([ADB, "-s", addr, "shell"], stdin=subprocess.PIPE,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 text=True, bufsize=1)
+            # Le fichier cree par le shell est en 660 : l'appli, hors du groupe,
+            # ne pouvait pas le lire (EACCES). Lecture pour tous.
+            o.stdin.write("umask 000; rm -f {0}; : > {0}; chmod 666 {0}\n".format(REGARD_TEL))
+            return o
+        except (OSError, ValueError):
+            return None
+
+    def ecrire():
+        """Appelee sous verrou : envoie la position courante, rouvre le canal si mort."""
+        if e["x"] < 0 or e["y"] < 0:
+            return
+        o = e["oeil"]
+        if o is None or o.poll() is not None:
+            if time.time() - e["ouvre"] < 1.0:
+                return
+            o = e["oeil"] = ouvrir()
+            if o is None:
+                return
+        try:
+            o.stdin.write("echo {} {} > {}\n".format(e["x"], e["y"], REGARD_TEL))
+            e["envoi"] = time.time()
+            e["attente"] = False
+        except (OSError, ValueError):
+            try:
+                o.kill()
+            except OSError:
+                pass
+            e["oeil"] = None
+
+    def battement():
+        while not fini.wait(0.04):
+            with verrou:
+                if e["bas"] and (e["attente"] or time.time() - e["envoi"] > 0.4):
+                    ecrire()
+
+    threading.Thread(target=battement, daemon=True).start()
+    dernier = 0.0
+    try:
+        for ligne in proc.stdout:
+            if stop_evt.is_set():
+                break
+            maintenant = time.time()
+            if maintenant - dernier > 0.2:
+                toucher(HUMAIN)
+                dernier = maintenant
+            m = ligne.split()
+            if len(m) != 3:
+                continue
+            try:
+                with verrou:
+                    if m[0] == "0003" and m[1] == "0035":
+                        e["x"] = int(m[2], 16) * 1000 // 13439
+                        e["attente"] = True
+                    elif m[0] == "0003" and m[1] == "0036":
+                        e["y"] = int(m[2], 16) * 1000 // 29919
+                        e["attente"] = True
+                    elif m[0] == "0003" and m[1] == "0039":
+                        if m[2].lower() == "ffffffff":
+                            ecrire()            # derniere position, sans plafond
+                            e["bas"] = False
+                        else:
+                            e["bas"] = True
+                    elif m[0] == "0001" and m[1] == "014a":
+                        if m[2] == "00000000":
+                            ecrire()
+                            e["bas"] = False
+                        else:
+                            e["bas"] = True
+                    elif m[0] == "0000" and e["attente"]:
+                        # Fin d'un rapport : on envoie, 40 ms d'ecart au plus serre.
+                        if maintenant - e["envoi"] > 0.04:
+                            ecrire()
+            except ValueError:
+                continue
+    finally:
+        fini.set()
+        proc.kill()
+        if e["oeil"] is not None:
+            try:
+                e["oeil"].kill()
+            except OSError:
+                pass
+
+
+def oreille_invite(addr, stop_evt):
+    """Dit au Creeper quand Chrome affiche une demande d'autorisation.
+
+    Android refuse la camera et le micro a Chrome tant qu'une fenetre du Creeper
+    est visible (mesure du 2026-10-17). Le Creeper ne s'efface donc que pendant
+    la demande. uiautomator voit le conteneur `tab_modal_dialog_container`, quelle
+    que soit la langue. Un dump n'est lance que si Chrome est devant : le
+    premier plan se lit par un `dumpsys` d'environ 0,2 s.
+
+    Un dump qui echoue (autre client uiautomator en cours) ne change rien :
+    on garde l'etat precedent. invite.vivant prouve au Creeper que le garde
+    tourne ; sans lui il reste efface tant que Chrome est devant.
+    """
+    etat = None
+    ecrit = 0.0
+    while not stop_evt.is_set():
+        devant = False
+        try:
+            r = sh(addr, "umask 000; touch {v}; dumpsys activity activities | grep -m1 topResumedActivity"
+                   .format(v=VIVANT_TEL), timeout=8)
+            devant = any(n in r.stdout for n in NAVIGATEURS_INVITE)
+            nouveau = False if not devant else None
+            if devant:
+                d = sh(addr, "rm -f /data/local/tmp/inv.xml; uiautomator dump /data/local/tmp/inv.xml "
+                       ">/dev/null 2>&1; cat /data/local/tmp/inv.xml 2>/dev/null", timeout=12)
+                if "<hierarchy" in d.stdout:
+                    nouveau = ":id/tab_modal_dialog_container" in d.stdout
+            if nouveau is not None and (nouveau != etat or time.time() - ecrit > 30):
+                sh(addr, "umask 000; echo {} > {}; chmod 666 {}".format(
+                    1 if nouveau else 0, INVITE_TEL, INVITE_TEL), timeout=8)
+                etat, ecrit = nouveau, time.time()
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        # Plus vite quand une demande est ouverte : on veut la voir se fermer.
+        stop_evt.wait(0.3 if etat else (0.6 if devant else 2.0))
+
+
+def oreille_boutons(addr, stop_evt):
+    """Arret d'urgence au bouton : Volume Bas, Haut, Bas, Haut en moins de 2,5 s.
+
+    C'etait « Volume Bas x3 » jusqu'au 2026-09-25. Faux depart le 24/09 a
+    00:08 : USER baissait le son pendant une lecture d'ecran, trois appuis en
+    trois secondes, et le pilotage s'est fige sans qu'il comprenne pourquoi.
+    Baisser le son trois fois est un geste ordinaire ; le va-et-vient bas-haut
+    ne l'est jamais, et il reste faisable a l'aveugle, ecran verrouille.
+    """
+    appuis = []
+    proc = flux(addr, ["shell", "getevent", "-l", BOUTONS])
+    try:
+        for ligne in proc.stdout:
+            if stop_evt.is_set():
+                break
+            toucher(HUMAIN)
+            if not ligne.rstrip().endswith("DOWN"):
+                continue
+            if "KEY_VOLUMEDOWN" in ligne:
+                touche = "B"
+            elif "KEY_VOLUMEUP" in ligne:
+                touche = "H"
+            else:
+                continue
+            maintenant = time.time()
+            appuis = [(t, k) for t, k in appuis if maintenant - t < 2.5] + [(maintenant, touche)]
+            if "".join(k for _, k in appuis[-4:]) == "BHBH":
+                appuis = []
+                armer(addr, "Volume Bas-Haut-Bas-Haut")
+    finally:
+        proc.kill()
+
+
+def oreille_notification(addr, stop_evt):
+    """Deux sources pour un meme appui, la plus rapide gagne.
+
+    - ActivityManager journalise toute diffusion, meme sans destinataire.
+    - l'appli elle-meme trace ce qu'elle recoit sous le tag pixelgarde.
+    """
+    proc = flux(addr, ["logcat", "-T", "1", "-s", "ActivityManager:I", TAG + ":I"])
+    try:
+        for ligne in proc.stdout:
+            if stop_evt.is_set():
+                break
+            if "Broadcasting: Intent" not in ligne and " recu " not in ligne:
+                continue
+            m = re.search(r"action=([\w=:]+)", ligne)
+            if m and deja_joue(m.group(1), time.time()):
+                continue            # deja joue par le relais reseau
+            if m:
+                toucher(HUMAIN)
+                executer(addr, m.group(1))
+            elif ACT_STOP in ligne:
+                toucher(HUMAIN)
+                armer(addr, "le bouton ARRETER")
+            elif ACT_GO in ligne:
+                toucher(HUMAIN)
+                lever(addr, "le bouton REPRENDRE")
+    finally:
+        proc.kill()
+
+
+def veilleur(fn, addr, stop_evt, morts):
+    """Chaque oreille se releve seule.
+
+    Avant, la mort d'un seul flux coupait les trois : le garde repartait de
+    zero, et `logcat -T 1` reprenait a l'instant present sans rien rejouer de
+    la coupure. Un appui sur REPRENDRE tombe dans ce trou etait perdu. C'est
+    la panne que USER a vue le 2026-08-25 : la pastille restait orange, puis
+    revenait au vert plusieurs minutes plus tard, a la reconnexion suivante.
+
+    Trois morts d'affilee en moins de 2 s : ce n'est plus un flux qui casse,
+    c'est le telephone qui est parti. On rend la main a main(), qui re-resout
+    l'adresse. Sinon on tournerait en boucle sur une adresse morte.
+    """
+    while not stop_evt.is_set():
+        debut = time.time()
+        try:
+            fn(addr, stop_evt)
+        except Exception as e:              # noqa: BLE001
+            print("{} : {}".format(fn.__name__, e), flush=True)
+        if stop_evt.is_set():
+            return
+        if time.time() - debut < 2:
+            morts.append(time.time())
+            if len([t for t in morts if time.time() - t < 30]) >= 3:
+                print("flux morts en rafale, on reprend l'adresse", flush=True)
+                stop_evt.set()
+                return
+        else:
+            morts.clear()
+            print("{} relancee".format(fn.__name__), flush=True)
+        time.sleep(1)
+
+
+def session(addr):
+    """Les oreilles se relevent chacune de leur cote, voir veilleur()."""
+    notifier(addr)
+    stop_evt = threading.Event()
+    morts = []
+    fils = [threading.Thread(target=veilleur, args=(f, addr, stop_evt, morts),
+                             daemon=True)
+            for f in (oreille_tactile, oreille_boutons, oreille_notification,
+                      veiller, oreille_relais, oreille_invite)]
+    for f in fils:
+        f.start()
+    vu_verrou = os.path.exists(STOP)
+    vu_etat = etat_courant()
+    tour = 0
+    # 0,3 s : assez fin pour que la couleur suive une action de 2 s, assez large
+    # pour ne rien couter. `pixel stop`/`go` changent les fichiers sans passer
+    # par ici : on suit l'etat sur disque plutot que nos propres evenements.
+    while not stop_evt.wait(timeout=0.3):
+        tour += 1
+        etat = etat_courant()
+        if etat != vu_etat:
+            vu_etat = etat
+            peindre(addr, etat)
+        verrou = os.path.exists(STOP)
+        if verrou != vu_verrou or (tour % 400 == 0 and not os.path.exists(CACHEE)):
+            vu_verrou = verrou
+            notifier(addr)
+    time.sleep(1)
+
+
+def session_relais(addr):
+    """Sans ADB : la pastille vit par le seul relais reseau.
+
+    Les diffusions vers l'appli passent par adb-garde, qui les confie au
+    relais. Les appuis reviennent par oreille_relais. On ressort des que
+    l'ADB repond de nouveau, ou si le relais se tait 2 minutes.
+    """
+    print("ADB muet, pastille servie par le relais reseau", flush=True)
+    stop_evt = threading.Event()
+    morts = []
+    threading.Thread(target=veilleur, args=(oreille_relais, addr, stop_evt, morts),
+                     daemon=True).start()
+    retour = {"addr": None}
+
+    def guetter_adb():
+        while not stop_evt.wait(timeout=60):
+            try:
+                a = adresse()
+            except Exception:       # noqa: BLE001
+                a = None
+            if a:
+                retour["addr"] = a
+                stop_evt.set()
+                return
+    threading.Thread(target=guetter_adb, daemon=True).start()
+
+    def lire_rapports():
+        # Le tour de lecture de veiller(), sans sa partie ADB. Sans lui, le
+        # 2026-10-03, un rapport arrive pendant que l'ADB etait coupe dormait :
+        # rapport.sh n'etait jamais lance, donc rien ne partait au QG.
+        while not stop_evt.wait(timeout=5):
+            for etape in (prefabriquer_voix, lecture_auto):
+                try:
+                    etape(addr)
+                except Exception as e:      # noqa: BLE001
+                    print("lecture par le relais : {}".format(e), flush=True)
+    threading.Thread(target=lire_rapports, daemon=True).start()
+    peindre(addr, etat_courant())
+    vu_etat, vu_n, muet_depuis, tour = etat_courant(), rapports_total(), None, 0
+    while not stop_evt.wait(timeout=0.5):
+        tour += 1
+        etat, n = etat_courant(), rapports_total()
+        # Un rapport qui arrive change le menu (un bouton par rapport) sans
+        # forcement changer l'etat : on repeint aussi sur le compte.
+        if etat != vu_etat or n != vu_n or tour % 240 == 0:
+            vu_etat, vu_n = etat, n
+            peindre(addr, etat)
+        if relais_vivant():
+            muet_depuis = None
+        elif muet_depuis is None:
+            muet_depuis = time.time()
+        elif time.time() - muet_depuis > 120:
+            print("relais muet 2 min, on attend le telephone", flush=True)
+            stop_evt.set()
+    if retour["addr"]:
+        print("ADB de retour sur " + retour["addr"], flush=True)
+
+
+def main():
+    if "--arret" in sys.argv:
+        if os.path.exists(PID):
+            try:
+                os.kill(int(open(PID).read()), 15)
+            except (ProcessLookupError, ValueError):
+                pass
+            os.remove(PID)
+        print("garde arrete")
+        return
+
+    with open(PID, "w") as f:
+        f.write(str(os.getpid()))
+    toucher(HUMAIN)
+
+    while True:
+        addr = adresse()
+        if not addr and relais_vivant():
+            try:
+                session_relais(PIXEL_ADDR)
+            except Exception as e:        # noqa: BLE001
+                print("relais interrompu : {}".format(e), flush=True)
+            time.sleep(2)
+            continue
+        if not addr:
+            print("telephone injoignable, nouvel essai dans 30 s", flush=True)
+            time.sleep(30)
+            continue
+        print("garde en ecoute sur " + addr, flush=True)
+        try:
+            session(addr)
+        except Exception as e:            # noqa: BLE001
+            print("flux interrompu : {}".format(e), flush=True)
+        time.sleep(5)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

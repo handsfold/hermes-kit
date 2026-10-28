@@ -1,0 +1,424 @@
+From 28e4f09ba4e887970c2931f56b4780d1607d03de Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Modele et effort : effort affiche dans le pied de reponse et
+ propose apres /model
+
+Le pied de reponse porte l'effort reellement en vigueur pour la session
+(override /reasoning inclus). Le selecteur /model l'affiche et enchaine sur un
+clavier d'effort une fois le modele choisi, comme l outil officiel en ligne de commande. Test que chaque
+niveau offert atteint le transport Codex intact.
+
+Retouche: R15
+---
+ gateway/run_turn.py                           |   8 ++
+ gateway/runtime_footer.py                     |  15 +-
+ gateway/slash_commands_model.py               |  13 +-
+ plugins/platforms/telegram/adapter.py         | 130 +++++++++++++++++-
+ plugins/platforms/telegram/telegram_effort.py |  44 ++++++
+ tests/gateway/test_telegram_effort.py         |  47 +++++++
+ 6 files changed, 248 insertions(+), 9 deletions(-)
+ create mode 100644 plugins/platforms/telegram/telegram_effort.py
+ create mode 100644 tests/gateway/test_telegram_effort.py
+
+diff --git a/gateway/run_turn.py b/gateway/run_turn.py
+index bc6a9bf950..268d28b24d 100644
+--- a/gateway/run_turn.py
++++ b/gateway/run_turn.py
+@@ -1480,12 +1480,20 @@ class GatewayTurnMixin:
+         from gateway.run import _load_gateway_config, _platform_config_key, _terminal_scope_cwd
+         try:
+             from gateway.runtime_footer import build_footer_line as _bfl
++            # Effort affiche = celui reellement en vigueur pour CETTE session
++            # (override /reasoning inclus), pas seulement le defaut global.
++            _eff_cfg = self._resolve_session_reasoning_config(source=source) or {}
++            if _eff_cfg.get("enabled") is False:
++                _eff = "off"
++            else:
++                _eff = str(_eff_cfg.get("effort") or "").strip() or None
+             return _bfl(
+                 user_config=_load_gateway_config(),
+                 platform_key=_platform_config_key(source.platform), model=agent_result.get("model"),
+                 context_tokens=agent_result.get("last_prompt_tokens", 0) or 0,
+                 context_length=agent_result.get("context_length") or None,
+                 cwd=_terminal_scope_cwd(""), turn_seconds=_turn_seconds,
++                effort=_eff,
+             )
+         except Exception as _footer_err:
+             logger.debug("runtime_footer build failed: %s", _footer_err)
+diff --git a/gateway/runtime_footer.py b/gateway/runtime_footer.py
+index 090bdf0cc9..73b648e2d4 100644
+--- a/gateway/runtime_footer.py
++++ b/gateway/runtime_footer.py
+@@ -13,6 +13,7 @@ import os
+ from typing import Any, Iterable, Optional
+ 
+ _DEFAULT_FIELDS: tuple[str, ...] = ("model", "context_pct", "cwd")
++_DEFAULT_EFFORT = "high"
+ _SEP = " · "
+ 
+ 
+@@ -74,6 +75,7 @@ def _format_latency(seconds: float) -> str:
+ def format_runtime_footer(*, model: Optional[str], context_tokens: int,
+                           context_length: Optional[int], cwd: Optional[str] = None,
+                           turn_seconds: Optional[float] = None,
++                          effort: Optional[str] = None,
+                           fields: Iterable[str] = _DEFAULT_FIELDS) -> str:
+     """Render the footer line, or "" if no fields have data. Fields whose data is missing (and
+     unknown field names) are skipped silently — a partial footer beats ``?%`` or empty slots."""
+@@ -85,6 +87,8 @@ def format_runtime_footer(*, model: Optional[str], context_tokens: int,
+     renderers = {
+         "model": lambda: _model_short(model),
+         "context_pct": context_pct,
++        # Effort de raisonnement en vigueur pour la session, pas le defaut global.
++        "effort": lambda: (effort or "").strip(),
+         # Skipped when the caller did not measure (None) or the value is negative.
+         "latency": lambda: _format_latency(turn_seconds) if turn_seconds is not None and turn_seconds >= 0 else "",
+         "cwd": lambda: _home_relative_cwd(cwd or _env_cwd()),
+@@ -94,7 +98,8 @@ def format_runtime_footer(*, model: Optional[str], context_tokens: int,
+ 
+ def build_footer_line(*, user_config: dict[str, Any] | None, platform_key: str | None,
+                       model: Optional[str], context_tokens: int, context_length: Optional[int],
+-                      cwd: Optional[str] = None, turn_seconds: Optional[float] = None) -> str:
++                      cwd: Optional[str] = None, turn_seconds: Optional[float] = None,
++                      effort: Optional[str] = None) -> str:
+     """Entry point for gateway/run.py: footer text, or "" when disabled / no data. Callers append it
+     to the final response themselves, preserving a single blank line of separation.
+     ``turn_seconds`` is the caller-measured (``time.monotonic()``) run duration; ``None`` skips the
+@@ -102,6 +107,12 @@ def build_footer_line(*, user_config: dict[str, Any] | None, platform_key: str |
+     cfg = resolve_footer_config(user_config, platform_key)
+     if not cfg.get("enabled"):
+         return ""
++    if effort is None:
++        try:
++            agent_cfg = (user_config or {}).get("agent") or {}
++            effort = str(agent_cfg.get("reasoning_effort") or "").strip() or _DEFAULT_EFFORT
++        except Exception:
++            effort = _DEFAULT_EFFORT
+     return format_runtime_footer(model=model, context_tokens=context_tokens,
+                                  context_length=context_length, cwd=cwd, turn_seconds=turn_seconds,
+-                                 fields=cfg.get("fields") or _DEFAULT_FIELDS)
++                                 effort=effort, fields=cfg.get("fields") or _DEFAULT_FIELDS)
+diff --git a/gateway/slash_commands_model.py b/gateway/slash_commands_model.py
+index da6a1d5d18..e6c520f258 100644
+--- a/gateway/slash_commands_model.py
++++ b/gateway/slash_commands_model.py
+@@ -354,12 +354,23 @@ class GatewayModelCommandsMixin:
+             providers = []
+         if not providers:
+             return False
++        _picker_metadata = self._thread_metadata_for_source(source, self._reply_anchor_for_event(event)) or {}
++        # Effort courant de la session (override /reasoning, sinon config.yaml),
++        # pour que /model l'affiche et le coche a l'etape suivante.
++        try:
++            _rc = self._resolve_session_reasoning_config(session_key=session_key)
++            if isinstance(_rc, dict):
++                _picker_metadata["current_effort"] = (
++                    "none" if _rc.get("enabled") is False else str(_rc.get("effort") or "")
++                ) or None
++        except Exception:  # noqa: BLE001 - affichage seul, jamais bloquant
++            pass
+         result = await adapter.send_model_picker(
+             chat_id=source.chat_id, providers=providers,
+             current_model=listing_kwargs["current_model"],
+             current_provider=listing_kwargs["current_provider"], session_key=session_key,
+             on_model_selected=on_model_selected,
+-            metadata=self._thread_metadata_for_source(source, self._reply_anchor_for_event(event)),
++            metadata=_picker_metadata or None,
+         )
+         return bool(result.success)
+ 
+diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
+index 5df81ba880..c632317a42 100644
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -3909,16 +3909,20 @@ class TelegramAdapter(BasePlatformAdapter):
+         self, chat_id: str, providers: list, current_model: str, current_provider: str, session_key: str,
+         on_model_selected, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
+         """Send an inline-keyboard model picker: provider → model drill-down, edited in place."""
++        effort_courant = self._effort_courant(metadata)
++
+         def build():
+             keyboard, provider_page_info = self._build_provider_keyboard(providers, 0)
+             text = self.format_message(
+-                self._provider_list_text(current_model, self._provider_get_label()(current_provider), provider_page_info)
++                self._provider_list_text(current_model, self._provider_get_label()(current_provider),
++                                         provider_page_info, effort_courant)
+             )
+ 
+             def _remember(msg):
+                 self._model_picker_state[str(chat_id)] = {
+                     "msg_id": msg.message_id, "providers": providers, "session_key": session_key, "on_model_selected": on_model_selected,
+-                    "current_model": current_model, "current_provider": current_provider, "provider_page": 0}
++                    "current_model": current_model, "current_provider": current_provider, "provider_page": 0,
++                    "current_effort": effort_courant}
+             return text, keyboard, _remember
+         return await self._send_prompt(
+             "send_model_picker", chat_id, metadata, build, thread_id=metadata.get("thread_id") if metadata else None,
+@@ -4075,9 +4079,51 @@ class TelegramAdapter(BasePlatformAdapter):
+         await self._picker_edit(query, f"⚙ *Model Configuration*\n\nProvider: *{pname}*{page_info}\nSelect a model:{extra}", keyboard)
+ 
+     @staticmethod
+-    def _provider_list_text(current_model: str, provider_label: str, page_info: str) -> str:
++    def _effort_courant(metadata: Optional[Dict[str, Any]] = None) -> str:
++        """Niveau d'effort en vigueur pour la session, pour affichage seul.
++
++        La passerelle le passe dans ``metadata`` quand la session en a un.
++        Sinon on lit le defaut global dans la configuration.
++        """
++        effort = str((metadata or {}).get("current_effort") or "").strip()
++        if effort:
++            return effort
++        try:
++            import yaml as _yaml
++            from hermes_constants import get_hermes_home
++            cfg = _yaml.safe_load((get_hermes_home() / "config.yaml").read_text(encoding="utf-8")) or {}
++            agent = cfg.get("agent") or {}
++            if isinstance(agent, dict):
++                return str(agent.get("reasoning_effort") or "").strip() or "high"
++        except Exception:
++            pass
++        return "high"
++
++    async def _proposer_effort(self, query, result_text: str, courant: Optional[str]) -> None:
++        """Enchaine sur le choix de l'effort, comme Claude Code apres /model.
++
++        Choisir un modele sans pouvoir regler son effort dans la foulee oblige a
++        taper /reasoning derriere : le clavier evite ce second aller-retour.
++        """
++        from plugins.platforms.telegram import telegram_effort as te
++        clavier = te.clavier_effort(
++            str(courant or "").strip() or None, prefixe="me", prefixe_global="meg", retour=False)
++        suite = "\n\nEffort : touche un niveau (\u2713 = actuel). Colonne droite = defaut partout."
++        try:
++            await query.edit_message_text(
++                text=self.format_message(result_text + suite),
++                parse_mode=ParseMode.MARKDOWN_V2, reply_markup=clavier)
++        except Exception:
++            with contextlib.suppress(Exception):
++                await query.edit_message_text(
++                    text=result_text + suite, parse_mode=None, reply_markup=clavier)
++
++    @staticmethod
++    def _provider_list_text(current_model: str, provider_label: str, page_info: str, effort: str = "") -> str:
++        # Effort de raisonnement en vigueur pour la session, pas le defaut global.
++        ligne_effort = f"Effort: `{effort}`\n" if effort else ""
+         return (f"⚙ *Model Configuration*\n\nCurrent model: `{current_model or 'unknown'}`\n"
+-                f"Provider: {provider_label}\n\nSelect a provider:{page_info}")
++                f"Provider: {provider_label}\n{ligne_effort}\nSelect a provider:{page_info}")
+ 
+     async def _picker_show_providers(self, query, state: dict, page: int, get_label) -> None:
+         """Render the (folded, paginated) provider list."""
+@@ -4086,7 +4132,9 @@ class TelegramAdapter(BasePlatformAdapter):
+             provider_label = get_label(state["current_provider"])
+         except Exception:
+             provider_label = state["current_provider"]
+-        await self._picker_edit(query, self._provider_list_text(state["current_model"], provider_label, provider_page_info), keyboard)
++        await self._picker_edit(query, self._provider_list_text(
++            state["current_model"], provider_label, provider_page_info,
++            str(state.get("current_effort") or "")), keyboard)
+ 
+     async def _picker_selection(self, query, state: dict, raw_idx: str) -> Optional[tuple]:
+         """Resolve ``mm:``/``mc:`` index → ``(idx, model_id, provider_slug, callback)``; answers + None on error."""
+@@ -4108,13 +4156,18 @@ class TelegramAdapter(BasePlatformAdapter):
+     async def _picker_switch(self, query, chat_id: str, model_id: str, provider_slug: str, callback) -> None:
+         """Perform the model switch, render the result, and drop the picker state."""
+         switch_failed = False
++        effort_courant = (self._model_picker_state.get(chat_id) or {}).get("current_effort")
+         try:
+             result_text = await callback(chat_id, model_id, provider_slug)
+         except Exception as exc:
+             logger.error("Model picker switch failed: %s", exc)
+             result_text = f"Error switching model: {exc}"
+             switch_failed = True
+-        await self._edit_result_text(query, result_text)
++        if switch_failed:
++            await self._edit_result_text(query, result_text)
++        else:
++            # Etape suivante : l'effort, comme dans Claude Code apres /model.
++            await self._proposer_effort(query, result_text, effort_courant)
+         await query.answer(text="Switch failed." if switch_failed else "Model switched!")
+         self._model_picker_state.pop(chat_id, None)
+ 
+@@ -4297,6 +4350,12 @@ class TelegramAdapter(BasePlatformAdapter):
+                 if chat_id:
+                     await handler(query, data, chat_id)
+                 return
++        # Boutons d'effort proposes apres /model. Ces handlers prennent (query, data).
++        for prefixes, handler in (
++            (("me:", "meg:"), self._handle_effort_callback),):
++            if data.startswith(prefixes):
++                await handler(query, data)
++                return
+         for prefix, handler in (
+             ("gt:", self._handle_gmail_triage_callback), ("ea:", self._handle_exec_approval_callback),
+             ("sc:", self._handle_slash_confirm_callback), ("cl:", self._handle_clarify_callback),
+@@ -5986,6 +6045,65 @@ class TelegramAdapter(BasePlatformAdapter):
+             return
+         await self.handle_message(event)
+ 
++    async def _appliquer_effort(self, query, idx: int, global_: bool, prefixe: str, prefixe_global: str, retour: bool) -> None:
++        """Applique un niveau d'effort choisi par bouton, puis coche ce niveau.
++
++        Le meme chemin que `/reasoning <n>` tape a la main ; ensuite le clavier
++        est redessine avec la coche sur le niveau retenu, pour que l'etat
++        affiche soit toujours l'etat reel.
++        """
++        from plugins.platforms.telegram import telegram_effort as te
++        try:
++            _l, niveau = te.EFFORTS[idx]
++        except (ValueError, IndexError):
++            await query.answer(text="Niveau inconnu."); return
++        cmd = f"/reasoning {niveau} --global" if global_ else f"/reasoning {niveau}"
++        await self._menu_apply_command(query, cmd)
++        with contextlib.suppress(Exception):
++            await query.edit_message_reply_markup(
++                reply_markup=te.clavier_effort(niveau, prefixe=prefixe, prefixe_global=prefixe_global, retour=retour)
++            )
++
++    async def _handle_effort_callback(self, query, data: str) -> None:
++        """Boutons d'effort affiches apres le choix d'un modele (``me:``/``meg:``)."""
++        try:
++            prefixe, idx = data.rsplit(":", 1)
++            await self._appliquer_effort(query, int(idx), prefixe == "meg", "me", "meg", retour=False)
++        except ValueError:
++            await query.answer(text="Niveau inconnu.")
++
++    async def _menu_apply_command(self, query, command_text: str) -> None:
++        """Applique une commande (/model, /reasoning) choisie par bouton.
++
++        Fabrique un event COMMAND via le pipeline normal, re-attribue a
++        l'utilisateur qui a touche le bouton (le message porte le bot comme
++        auteur), puis reutilise handle_message : meme chemin que la commande
++        tapee a la main.
++        """
++        msg = getattr(query, "message", None)
++        if msg is None:
++            await query.answer(text="Contexte indisponible."); return
++        try:
++            event = self._build_message_event(msg, MessageType.COMMAND)
++        except Exception as e:  # noqa: BLE001
++            logger.warning("[%s] menu apply build failed: %s", self.name, e)
++            await query.answer(text="Erreur."); return
++        u = getattr(query, "from_user", None)
++        uid = str(getattr(u, "id", "")) or None
++        uname = getattr(u, "full_name", None) or getattr(u, "first_name", None)
++        event.text = command_text
++        if uid:
++            event.user_id = uid
++            event.user_name = uname
++            if getattr(event, "source", None) is not None:
++                event.source.user_id = uid
++                event.source.user_name = uname
++        await query.answer(text=command_text)
++        try:
++            await self.handle_message(event)
++        except Exception as e:  # noqa: BLE001
++            logger.warning("[%s] menu apply (%s) failed: %s", self.name, command_text, e)
++
+     async def _handle_location_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+         """Handle incoming location/venue pin messages."""
+         msg = self._effective_update_message(update)
+diff --git a/plugins/platforms/telegram/telegram_effort.py b/plugins/platforms/telegram/telegram_effort.py
+new file mode 100644
+index 0000000000..f5439b34f1
+--- /dev/null
++++ b/plugins/platforms/telegram/telegram_effort.py
+@@ -0,0 +1,44 @@
++"""Clavier d'effort de raisonnement, propose apres le choix d'un modele.
++
++Un tap sur un niveau = `/reasoning <niveau>` (colonne gauche, ce topic) ou
++`/reasoning <niveau> --global` (colonne droite, defaut partout). Les callback_data
++sont `<prefixe>:<i>` et `<prefixe_global>:<i>`, i indexant EFFORTS : garder les
++indices pour les boutons deja envoyes sur Telegram.
++"""
++from __future__ import annotations
++
++from typing import List, Tuple
++
++from telegram import InlineKeyboardButton, InlineKeyboardMarkup
++
++# Astra accepte ces cinq niveaux via Codex. ultra appartient au client Codex et
++# n'est pas accepte par l'API (2026-09-13).
++EFFORTS: List[Tuple[str, str]] = [
++    ("Leger · low", "low"),
++    ("Equilibre · medium", "medium"),
++    ("Pousse · high", "high"),
++    ("Tres pousse · xhigh", "xhigh"),
++    ("Maximum · max (Astra)", "max"),
++]
++
++
++def clavier_effort(
++    courant: str | None = None,
++    prefixe: str = "me",
++    prefixe_global: str = "meg",
++    retour: bool = False,
++) -> InlineKeyboardMarkup:
++    # Deux colonnes : a gauche pour la session, a droite pour figer le defaut
++    # global, sans rien taper. Le niveau courant est coche, comme le fournisseur
++    # courant dans /model.
++    rows = []
++    for i, (label, niveau) in enumerate(EFFORTS):
++        if courant and niveau == courant:
++            label = f"✓ {label}"
++        rows.append([
++            InlineKeyboardButton(label, callback_data=f"{prefixe}:{i}"),
++            InlineKeyboardButton("epingler", callback_data=f"{prefixe_global}:{i}"),
++        ])
++    if retour:
++        rows.append([InlineKeyboardButton("< Retour", callback_data="menu:root")])
++    return InlineKeyboardMarkup(rows)
+diff --git a/tests/gateway/test_telegram_effort.py b/tests/gateway/test_telegram_effort.py
+new file mode 100644
+index 0000000000..b698cea393
+--- /dev/null
++++ b/tests/gateway/test_telegram_effort.py
+@@ -0,0 +1,47 @@
++"""Every effort offered by Telegram must reach the Codex transport intact."""
++
++import pytest
++
++import gateway.run as gateway_run
++from agent.transports.codex import ResponsesApiTransport
++from plugins.platforms.telegram.telegram_effort import EFFORTS, clavier_effort
++from tests.gateway.test_reasoning_command import _make_event, _make_runner
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("effort", [value for _, value in EFFORTS])
++@pytest.mark.parametrize("global_scope", [False, True])
++async def test_menu_effort_survives_command_resolution_and_transport(
++    tmp_path, monkeypatch, effort, global_scope,
++):
++    monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
++    (tmp_path / "config.yaml").write_text("agent:\n  reasoning_effort: high\n")
++    runner = _make_runner()
++    event = _make_event(f"/reasoning {effort}" + (" --global" if global_scope else ""))
++    result = await runner._handle_reasoning_command(event)
++    assert "✓" in result
++    if global_scope:
++        runner = _make_runner()  # Reload the saved default as after a restart.
++    config = runner._resolve_session_reasoning_config(source=event.source)
++    kwargs = ResponsesApiTransport().build_kwargs(
++        model="gpt-6-astra",
++        instructions="Test only.",
++        messages=[{"role": "user", "content": "Hello"}],
++        tools=[],
++        reasoning_config=config,
++        is_codex_backend=True,
++    )
++    assert kwargs["reasoning"]["effort"] == effort
++    assert not {"temperature", "top_p", "top_logprobs"}.intersection(kwargs)
++
++
++@pytest.mark.parametrize("prefix,global_prefix", [("me", "meg"), ("menu:e", "menu:eg")])
++def test_effort_buttons_keep_callback_indices_and_selected_state(prefix, global_prefix):
++    for selected, (_, effort) in enumerate(EFFORTS):
++        rows = clavier_effort(
++            effort, prefixe=prefix, prefixe_global=global_prefix, retour=False,
++        ).inline_keyboard
++        for index, row in enumerate(rows):
++            assert row[0].callback_data == f"{prefix}:{index}"
++            assert row[1].callback_data == f"{global_prefix}:{index}"
++            assert row[0].text.startswith("✓") == (index == selected)

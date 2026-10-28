@@ -1,0 +1,81 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+PY=".venv/bin/python"
+[ -x "$PY" ] || PY="python3"   # repli ; le venv porte les dépendances du projet
+
+# Python de VALIDATION SYNTAXIQUE = celui de la PRODUCTION, pas celui du poste.
+# Un venv récent laisserait passer une syntaxe que l'image de prod refuse, et on
+# ne s'en apercevrait qu'au health-check, après le déploiement.
+# Renseigner PY_PROD_VERSION dès que la version de la prod est connue.
+PY_PROD_VERSION="${PY_PROD_VERSION:-@@PYPROD@@}"
+PY_CHECK=""
+for _c in "$(command -v "python$PY_PROD_VERSION" 2>/dev/null)" \
+          "/usr/bin/python$PY_PROD_VERSION" \
+          "$HOME"/.local/share/uv/python/cpython-"$PY_PROD_VERSION"*/bin/"python$PY_PROD_VERSION"; do
+  if [ -n "$_c" ] && [ -x "$_c" ]; then PY_CHECK="$_c"; break; fi
+done
+
+if [ "$CIBLE" = "all" ] || [ "$CIBLE" = "py" ] || [ "$CIBLE" = "--fast" ]; then
+  # Lint d'abord : un import mort se voit en 2 s, inutile de payer la suite.
+  # Le jeu de règles est dans pyproject.toml. Une règle ne passe en `ignore`
+  # que pour une raison écrite : taire du bruit aveugle le linter, et c'est
+  # comme ça que 22 vrais noms non définis sont partis en prod sur DJ.
+  # Un outil absent n'est pas un contrôle vert : ce serait exactement le
+  # mensonge qu'on répare. Il compte pour un échec, et le message porte le remède.
+  outil_absent() { ! "$PY" -m "$1" --version >/dev/null 2>&1; }
+  manque() {
+    printf '%s-> %s : outil absent%s\n' "$GRAS" "$1" "$RAZ"
+    printf '  Remède : python3 -m venv .venv && .venv/bin/pip install ruff pytest\n\n'
+    ECHECS=$((ECHECS + 1))
+  }
+
+  if outil_absent ruff; then
+    manque "Lint et format Python (ruff)"
+  else
+    etape "Lint Python (ruff)"   "$PY" -m ruff check .
+    etape "Format Python (ruff)" "$PY" -m ruff format --check .
+  fi
+
+  if [ -n "$PY_CHECK" ]; then
+    etape "Syntaxe à la version de la prod ($("$PY_CHECK" -V 2>&1))" \
+          "$PY_CHECK" -m compileall -q @@PKG@@
+  else
+    printf '%s-> Syntaxe prod ignorée%s : aucun python%s sur le poste.\n\n' \
+           "$GRAS" "$RAZ" "$PY_PROD_VERSION"
+  fi
+
+  # Les dépendances implicites se disent AVANT, sinon un service éteint se lit
+  # comme une régression. Modèle, à décommenter le jour où Redis entre en jeu :
+  # if ! (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then
+  #   printf '%s-> Redis absent%s : N tests vont échouer, ce n'\''est pas une régression.\n\n' "$GRAS" "$RAZ"
+  # fi
+
+  # tests/regression/ est exclu à dessein : il exige des fixtures générées et
+  # se lance à part (scripts/check.sh reg). Les tests marqués `slow` sortent du
+  # passage rapide : un filet qu'on n'ose plus lancer ne protège plus rien.
+  # pytest sort 5 quand il ne collecte RIEN. Une suite vide n'est pas une suite
+  # verte : c'est le défaut de --passWithNoTests, qu'on refuse ici aussi.
+  tests_courants() {
+    "$PY" -m pytest tests/unit tests/integration -q -m "not slow"
+    local code=$?
+    if [ "$code" = "5" ]; then
+      echo "  Aucun test collecté. Le filet ne protège rien tant qu'il est vide :"
+      echo "  écrire le premier test dans tests/unit/."
+      return 1
+    fi
+    return "$code"
+  }
+  if outil_absent pytest; then
+    manque "Tests"
+  else
+    etape "Tests (unit + integration)" tests_courants
+  fi
+fi
+
+if [ "$CIBLE" = "reg" ]; then
+  etape "Tests de régression" "$PY" -m pytest tests/regression -q
+fi
+
+if [ "$CIBLE" = "slow" ]; then
+  etape "Tests lents" "$PY" -m pytest tests -q -m slow
+fi
+

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bulle_menu_arreter">ARRÊTER</string>
+    <string name="bulle_menu_masquer">Masquer</string>
+    <string name="bulle_etat_muet">hote-1 muet, appui en attente</string>
+    <string name="bulle_etat_pause">Pilotage en pause</string>
+    <string name="bulle_etat_attente">Tu as la main</string>
+    <string name="bulle_etat_actif">Agent actif</string>
+    <string name="bulle_etat_lecture_pause">Lecture en pause : touche pour reprendre</string>
+    <string name="bulle_etat_lecture">Lecture : touche pour mettre en pause</string>
+    <string name="bulle_etat_ecoute">On t\'écoute</string>
+    <string name="bulle_etat_reflechit">Le QG réfléchit</string>
+    <string name="bulle_etat_pret">À toi : maintiens la bulle pour parler</string>
+    <string name="bulle_etat_capture">Écran enregistré</string>
+    <string name="bulle_etat_veille">Agent en veille</string>
+    <string name="bulle_titre_vitesse">Vitesse</string>
+    <string name="bulle_titre_cerveau">Cerveau</string>
+    <string name="bulle_titre_bleu">Filtre bleu</string>
+    <string name="bulle_titre_reglages">Réglages</string>
+    <string name="bulle_tuile_annuler">Annuler</string>
+    <string name="bulle_tuile_precedent">Précédent</string>
+    <string name="bulle_tuile_suivant">Suivant</string>
+    <string name="bulle_tuile_arreter">Arrêter</string>
+    <string name="bulle_tuile_reprendre">Reprendre</string>
+    <string name="bulle_tuile_pause">Pause</string>
+    <string name="bulle_tuile_envoyer">Envoyer</string>
+    <string name="bulle_tuile_parler">Parler</string>
+    <string name="bulle_pct">%1$d %%</string>
+    <string name="bulle_choix_detail">Détail</string>
+    <string name="bulle_choix_oui">Oui</string>
+    <string name="bulle_choix_non">Non</string>
+    <string name="bulle_onglet_apps">Apps</string>
+</resources>

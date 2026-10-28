@@ -1,0 +1,42 @@
+# ── Front ────────────────────────────────────────────────────────────────────
+if [ "$CIBLE" = "all" ] || [ "$CIBLE" = "web" ] || [ "$CIBLE" = "--fast" ]; then
+  if [ -d node_modules ]; then
+    # Pas de --max-warnings arbitraire : le cliquet se met en place le jour où
+    # la dette existe, en figeant une baseline, pas en inventant un seuil.
+    etape "Lint front (ESLint)"  npx --no-install eslint .
+    etape "Typecheck TypeScript" npx --no-install tsc --noEmit
+    # Jamais --passWithNoTests : il fait passer une suite vide en silence.
+    etape "Tests front (vitest)" npx --no-install vitest run
+  else
+    printf '%s-> Front ignoré%s : node_modules absent (pnpm install --frozen-lockfile).\n\n' "$GRAS" "$RAZ"
+  fi
+
+  # ── Chaîne de dépendances ──────────────────────────────────────────────
+  # Le fichier lock est la seule chose qui rend une installation reproductible :
+  # il fige aussi les dépendances TRANSITIVES, celles qu'on n'a jamais choisies
+  # et par où sont passées les compromissions d'août 2026. Il se commite.
+  if [ -f pnpm-lock.yaml ]; then
+    # --frozen-lockfile refuse de MODIFIER le lock : si package.json a bougé
+    # sans que le lock suive, ça échoue au lieu de résoudre en silence.
+    etape "Lock gelé (pnpm)" pnpm install --frozen-lockfile --dry-run
+    # Un audit n'est pas un antivirus : il ne voit que les failles DÉJÀ
+    # publiées, jamais un paquet compromis ce matin. C'est le délai de
+    # publication de pnpm-workspace.yaml qui couvre ce trou, pas cette étape.
+    etape "Audit dépendances" pnpm audit --audit-level high
+  elif [ -f package-lock.json ] || [ -f yarn.lock ]; then
+    lock_etranger() {
+      echo "  package-lock.json ou yarn.lock présent : ce projet est en pnpm."
+      echo "  Deux locks qui coexistent, c'est deux arbres de dépendances possibles."
+      echo "  Remède : supprimer le lock étranger, puis pnpm install."
+      return 1
+    }
+    etape "Un seul gestionnaire" lock_etranger
+  fi
+
+  # Cliquet de dette design, quand il y a une UI : audit_ui.mjs + sa baseline,
+  # échoue seulement si un compteur MONTE. Voir la section 6 du socle.
+  if [ -f scripts/audit_ui.mjs ]; then
+    etape "Cliquet design (audit_ui)" node scripts/audit_ui.mjs
+  fi
+fi
+

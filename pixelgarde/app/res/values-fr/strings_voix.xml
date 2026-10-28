@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voix_detail">Détail</string>
+    <string name="voix_rien_reecouter">Rien à réécouter.</string>
+    <string name="voix_titre_reponse">Réponse du QG</string>
+    <string name="voix_titre_rapport">Rapport du QG</string>
+    <string name="voix_qg_patiente">Le QG patiente</string>
+    <string name="voix_envoi_annule">Envoi annulé.</string>
+    <string name="voix_pas_plus_ancien">Pas de rapport plus ancien.</string>
+    <string name="voix_dernier_rapport">C\'est le dernier rapport.</string>
+    <string name="voix_format_heure">HH\'h\'mm</string>
+    <string name="voix_titre_relu">Rapport %1$d/%2$d, écouté à %3$s</string>
+    <string name="voix_canal_lecture">Voix du QG</string>
+    <string name="voix_canal_conversation">Conversation vocale</string>
+    <string name="voix_titre_pause">%1$s (en pause)</string>
+    <string name="voix_touche_reprendre">Touche la bulle pour reprendre</string>
+    <string name="voix_touche_pause">Touche la bulle pour mettre en pause</string>
+    <string name="voix_btn_precedent">Précédent</string>
+    <string name="voix_btn_pause">Pause</string>
+    <string name="voix_btn_reprendre">Reprendre</string>
+    <string name="voix_btn_suivant">Suivant</string>
+    <string name="voix_btn_arreter">Arrêter</string>
+    <string name="voix_conversation">Conversation avec le QG</string>
+</resources>

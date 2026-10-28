@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Pose la derniere version de la pastille des que le telephone repond.
+#
+# POURQUOI CE FICHIER EXISTE (2026-08-26)
+# Le mode conversation vocale a demande une recompilation de l'APK. Le Pixel
+# etait injoignable ce soir-la : l'installation attendait donc un geste de USER,
+# qui n'a pas a en faire. Ce script tourne toutes les 5 minutes, ne fait rien
+# quand la version posee est deja la bonne, et installe sans un mot sinon.
+#
+# Il compare des versionCode, pas des dates : reinstaller un APK identique
+# tuerait le processus de la pastille et la ferait clignoter toutes les 5 min.
+# La consequence : TOUTE modification du code Java doit s'accompagner d'un
+# versionCode superieur dans AndroidManifest.xml, sinon elle ne partira jamais.
+set -uo pipefail
+APPLI=com.poste.pixelgarde
+RACINE="$(cd "$(dirname "$0")/../.." && pwd)"
+APK="$RACINE/applis/pixelgarde/pixelgarde.apk"
+[ -f "$APK" ] || exit 0
+
+# GARDE-FOU (2026-10-23) : la v2.63 et la v2.64 sont restees compilees sans
+# jamais partir, et personne ne le savait : tous les `exit 0` ci-dessous
+# etaient muets. Desormais, un APK plus recent que la version posee depuis plus
+# d'une heure FAIT ECHOUER ce service, et alerte-panne previent le QG (1 message
+# par 12 h). Seul l'arret d'urgence USER (/tmp/pixel-stop) reste silencieux.
+POSE_FICHIER="${XDG_CACHE_HOME:-$HOME/.cache}/pixel-maj-pose"
+RETARD_S=3600
+VOULUE="$("${ANDROID_HOME:-$HOME/Android/Sdk}/build-tools/36.1.0/aapt2" \
+  dump badging "$APK" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
+[ -n "$VOULUE" ] || exit 0
+VERIFIEE="$(cat "$POSE_FICHIER" 2>/dev/null || echo 0)"
+# bloque <raison> : rien ne peut etre pose maintenant. Silence si l'attente est
+# recente ou voulue, echec bruyant si la version voulue traine depuis trop longtemps.
+bloque() {
+  [ -e /tmp/pixel-stop ] && exit 0
+  [ "$VERIFIEE" -ge "$VOULUE" ] && exit 0
+  AGE=$(( $(date +%s) - $(stat -c %Y "$APK") ))
+  [ "$AGE" -ge "$RETARD_S" ] || exit 0
+  echo "pixel-maj : APK version $VOULUE compile il y a $(( AGE / 60 )) min et jamais pose sur le Pixel ($1)"
+  exit 1
+}
+
+# Le Pixel seulement : le 25/09, le Samsung A07 passait premier et a recu Creeper.
+# Le Pixel apparait sous 2 adresses (Tailscale et LAN). Celle qui est coupee
+# reste « device » mais ne repond pas : le 2026-10-23 la v2.63 et la v2.64 ne
+# sont jamais parties car on visait l'adresse morte. On prend la premiere qui
+# repond vraiment.
+ADDR=""
+for a in $(adb devices -l | awk '/ device / && /model:Pixel_9_Pro_XL/{print $1}'); do
+  if timeout 6 /usr/lib/android-sdk/platform-tools/adb -s "$a" shell true >/dev/null 2>&1; then ADDR="$a"; break; fi
+done
+[ -n "$ADDR" ] || bloque "le Pixel ne repond sur aucune adresse"
+
+# L'arret d'urgence prime : USER a dit que personne ne touche au telephone.
+[ -e /tmp/pixel-stop ] && exit 0
+
+# Jamais pendant une conversation vocale : l'installation tue le processus,
+# la bulle et le micro avec (2026-10-12 13:07, USER testait les mains libres).
+# En mains libres, /tmp/pixel-voix reste pose des heures, micro en attente :
+# on attend alors 15 min sans aucun tour (voixtour.log) et un micro au repos.
+if [ -e /tmp/pixel-voix ]; then
+  ETAT="$(cat /tmp/pixel-voix-etat 2>/dev/null)"
+  [ "$ETAT" = pret ] || bloque "conversation vocale en cours"
+  DERNIER="$(stat -c %Y "$HOME/.hermes/logs/voixtour.log" 2>/dev/null || echo 0)"
+  [ $(( $(date +%s) - DERNIER )) -ge 900 ] || bloque "conversation vocale recente"
+fi
+
+lire_version() {
+  adb -s "$ADDR" shell dumpsys package "$APPLI" 2>/dev/null \
+    | grep -m1 versionCode | sed 's/.*versionCode=\([0-9]*\).*/\1/'
+}
+POSEE="$(lire_version)"
+# Pas de version posee = appli absente : on installe. Version egale ou
+# superieure = rien a faire.
+if [ -n "$POSEE" ] && [ "$POSEE" -ge "$VOULUE" ]; then
+  mkdir -p "$(dirname "$POSE_FICHIER")"; echo "$POSEE" > "$POSE_FICHIER"
+  exit 0
+fi
+# Version posee illisible (adb muet) alors que l'adresse repondait : meme garde-fou.
+[ -n "$POSEE" ] || adb -s "$ADDR" shell true >/dev/null 2>&1 || bloque "adb ne lit pas la version posee"
+
+echo "pixel-maj : $APPLI ${POSEE:-absent} -> $VOULUE, installation"
+# --sans-install ne rebatit pas : on reutilise l'APK deja signe, et on rejoue
+# le meme bloc de permissions que construire.sh, dont une reinstallation
+# remet certaines a zero.
+adb -s "$ADDR" install -r -g "$APK" || exit 1
+adb -s "$ADDR" shell appops set "$APPLI" SYSTEM_ALERT_WINDOW allow || true
+adb -s "$ADDR" shell appops set "$APPLI" GET_USAGE_STATS allow || true
+adb -s "$ADDR" shell pm revoke "$APPLI" android.permission.POST_NOTIFICATIONS || true
+adb -s "$ADDR" shell appops set "$APPLI" POST_NOTIFICATION ignore || true
+adb -s "$ADDR" shell pm grant "$APPLI" android.permission.RECORD_AUDIO || true
+adb -s "$ADDR" shell cmd notification allow_listener "$APPLI/.Silencieux" || true
+"$RACINE/bin/pixel/pixel" bulle >/dev/null || true
+# On relit ce que le Pixel a VRAIMENT : un `install` sans erreur ne prouve rien.
+APRES="$(lire_version)"
+if [ -z "$APRES" ] || [ "$APRES" -lt "$VOULUE" ]; then
+  echo "pixel-maj : installation de la version $VOULUE sans effet, le Pixel annonce ${APRES:-rien}"
+  exit 1
+fi
+mkdir -p "$(dirname "$POSE_FICHIER")"; echo "$APRES" > "$POSE_FICHIER"
+echo "pixel-maj : pastille $VOULUE posee (relue sur le Pixel : $APRES)"

@@ -1,0 +1,4 @@
+base amont : v2026.9.14 (tag Hermes, commit 345cd2b057)
+patches : 15, un fichier par retouche, dans l'ordre
+exclus (propres a l'installation d'origine) : R03 R21
+application : cd ~/.hermes/hermes-agent && git checkout -B hermes-kit v2026.9.14 && git am hermes/patches/*.patch

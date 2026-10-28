@@ -1,0 +1,58 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+PY=".venv/bin/python"
+[ -x "$PY" ] || PY="python3"   # repli ; le venv porte les dépendances du projet
+
+# Python de VALIDATION SYNTAXIQUE = celui de la PRODUCTION, pas celui du poste.
+# Un venv récent laisserait passer une syntaxe que l'image de prod refuse, et on
+# ne s'en apercevrait qu'au health-check, après le déploiement.
+PY_PROD_VERSION="${PY_PROD_VERSION:-@@PYPROD@@}"
+PY_CHECK=""
+for _c in "$(command -v "python$PY_PROD_VERSION" 2>/dev/null)" \
+          "/usr/bin/python$PY_PROD_VERSION" \
+          "$HOME"/.local/share/uv/python/cpython-"$PY_PROD_VERSION"*/bin/"python$PY_PROD_VERSION"; do
+  if [ -n "$_c" ] && [ -x "$_c" ]; then PY_CHECK="$_c"; break; fi
+done
+
+if [ "$CIBLE" = "all" ] || [ "$CIBLE" = "py" ] || [ "$CIBLE" = "--fast" ]; then
+  outil_absent() { ! "$PY" -m "$1" --version >/dev/null 2>&1; }
+  manque() {
+    printf '%s-> %s : outil absent%s\n' "$GRAS" "$1" "$RAZ"
+    printf '  Remède : python3 -m venv .venv && .venv/bin/pip install ruff pytest\n\n'
+    ECHECS=$((ECHECS + 1))
+  }
+
+  # Le lint passe par le CLIQUET, pas en direct : ce projet existait avant le
+  # filet, sa dette est héritée. Un linter qui crie sept cents fois le premier
+  # jour est un linter qu'on désactive, et il ne protège alors plus rien. Le
+  # cliquet tolère l'existant, figé dans .cliquet.json, et échoue seulement si
+  # un compteur MONTE. Voir la section 6 du socle.
+  #   scripts/cliquet.py --detail     ce qui reste à nettoyer
+  #   scripts/cliquet.py --baseline   refiger après une correction
+  if outil_absent ruff; then
+    manque "Lint Python (ruff)"
+  else
+    etape "Cliquet de lint Python (ruff)" "$PY" scripts/cliquet.py --only ruff
+    # Le formatage n'est PAS bloquant sur un projet repris : reformater tout le
+    # dépôt d'un coup noierait le prochain diff et rendrait `git blame` illisible.
+    # Il le devient avec --strict, et le jour où le dépôt aura été reformaté.
+    avertir "Format Python (ruff format)" "$PY" -m ruff format --check @@PKG@@
+  fi
+
+  if [ -n "$PY_CHECK" ]; then
+    etape "Syntaxe à la version de la prod ($("$PY_CHECK" -V 2>&1))" \
+          "$PY_CHECK" -m compileall -q @@PKG@@
+  else
+    printf '%s-> Syntaxe prod NON vérifiée%s : aucun python%s sur le poste.\n' \
+           "$GRAS" "$RAZ" "$PY_PROD_VERSION"
+    printf '  Remède : uv python install %s (la prod tourne dessus, pas sur le venv du poste).\n\n' \
+           "$PY_PROD_VERSION"
+  fi
+
+  # Les dépendances implicites se disent AVANT, sinon un service éteint se lit
+  # comme une régression. Modèle, à décommenter quand elles existent :
+  # if ! (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then
+  #   printf '%s-> Redis absent%s : N tests vont échouer, ce n'\''est pas une régression.\n\n' "$GRAS" "$RAZ"
+  # fi
+
+@@BLOC_TESTS@@fi
+

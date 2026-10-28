@@ -1,0 +1,44 @@
+From 073f045853e75026c760507e3e89667304547263 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Voix : la reponse livree par la voie file d'attente part
+ aussi en audio
+
+Quand USER ecrit avant la fin du tour, la voie 'message arrive pendant le tour'
+n'appelait jamais la synthese (2026-10-08) : reponse sans audio. Meme regle
+que le chemin normal, envoyee apres le texte.
+
+Retouche: R08
+---
+ gateway/run_turn.py | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/gateway/run_turn.py b/gateway/run_turn.py
+index 38b586bde2..2eff09243e 100644
+--- a/gateway/run_turn.py
++++ b/gateway/run_turn.py
+@@ -3510,6 +3510,24 @@ class GatewayTurnMixin:
+                 )
+             except Exception as e:
+                 logger.warning("Failed to send first response before queued message: %s", e)
++            # Voix : cette voie « message arrivé pendant le tour » n'appelait jamais la synthèse,
++            # d'où une réponse sans audio quand USER écrit avant la fin (2026-10-08). Même règle que
++            # le chemin normal (_hmwa_deliver_turn_response), envoyée APRÈS le texte, comme le chemin normal.
++            try:
++                _voice_ev = MessageEvent(
++                    text="", source=turn_ctx.source, message_id=turn_ctx.event_message_id,
++                )
++                _stts_done = adapter is not None and bool(
++                    getattr(adapter, "_streaming_tts_turn_completed", lambda *_a, **_k: False)(
++                        session_key, turn_ctx.run_generation)
++                )
++                if not _stts_done and self._should_send_voice_reply(
++                    _voice_ev, first_response, [], already_sent=bool(_already_streamed),
++                ):
++                    await self._send_voice_reply(_voice_ev, first_response)
++                    logger.info("Voix envoyee pour la reponse de la voie file d'attente (session %s)", session_key or "?")
++            except Exception as e:
++                logger.warning("Voix de la voie file d'attente abandonnee: %s", e)
+         # Release deferred bg-review notifications: pop (no double-fire in base.py's finally) and call.
+         _bg_cb = self._pop_post_delivery_callback(adapter, session_key, turn_ctx.run_generation)
+         if callable(_bg_cb):

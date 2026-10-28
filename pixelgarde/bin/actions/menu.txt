@@ -1,0 +1,48 @@
+# Le menu de la pastille flottante. Une ligne = un bouton : id:Libelle
+# L'ordre ici est l'ordre a l'ecran. Les lignes vides et les # sont ignorees.
+#
+# Ce menu ne porte QUE des actions courantes.
+#
+#
+# Un id quelconque appelle actions/<id>.sh, qui recoit l'adresse adb en $1.
+# Ajouter un bouton = poser le script + ajouter la ligne. Aucune recompilation.
+#
+# ids reserves, traites sans script : masquer, revenir.
+#
+# Le bouton d'etat (pause / reprise) est REVENU dans le menu le 27/08/2026,
+# apres une journee sur l'appui long : un geste que rien n'annonce ne se
+# retient pas. Il n'est PAS dans la liste ci-dessous, le garde l'ajoute lui
+# meme en DERNIERE ligne, avec le libelle qui correspond a l'etat reel lu
+# dans etat.txt. Le mettre ici en dur afficherait le mauvais des deux.
+#
+# « Photo de l'ecran » a ete retire le 29/08/2026 a la demande de USER : le
+# Pixel a deja son propre raccourci de capture, et un menu de bulle ne doit
+# porter que ce qu'on ne peut pas faire autrement. Le script actions/shot.sh
+# reste sur le disque ; remettre la ligne « shot:Photo de l'ecran » le rallume.
+#
+# « Ouvrir le QG ecrit » a ete retire le 26/08/2026 : il faisait doublon avec
+# « Parler », que USER utilise toujours. Le script actions/qg.sh reste sur le
+# disque ; remettre la ligne « qg:Ouvrir le QG ecrit » le rallume.
+#
+# Le 2026-10-01, USER a trouve ce premier niveau trop charge (12 lignes) : il
+# n'y garde que ce qu'il touche tous les jours. Le reste vit dans
+# reglages.txt, ouvert par la puce « Reglages ». « voixmode » est une place
+# reservee : le garde y peint le bouton des rapports avec son etat reel.
+# « Enregistrer l'ecran » et « Lire l'ecran » sont descendus dans Reglages ;
+# un enregistrement EN COURS remonte ici, pour qu'on puisse l'arreter.
+# Refonte du 2026-10-02 : les 3 premiers (voix, bilan, conseil) sont poses
+# en tuiles en tete de carte par l'appli, ou qu'ils soient dans ce fichier.
+# Une ligne "-:-" coupe un groupe : l'appli y trace un trait fin. Les
+# accents sont permis : le garde les encode pour adb (pour_adb).
+# « missions » (2026-10-03) ouvre l'ecran Missions de l'appli, sans script :
+# le garde n'y met que le libelle vivant (« Missions · ProjetA tourne »).
+voix:Parler au QG
+ecrire:Écrire
+bilan:Où j'en suis
+conseil:Conseil
+missions:Activité
+lirepresse:Lire le presse-papier
+voixmode:Rapports
+-:-
+reglages:Réglages
+masquer:Masquer la bulle

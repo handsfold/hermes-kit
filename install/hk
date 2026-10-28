@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# hk: drive the hermes-kit installation (proxy + Hermes gateway).
+# Usage: hk status|start|stop|restart|logs|update|doctor|reparer|telemetrie [on|off|voir]|coauteur [on|off|voir]|audit|annuler
+set -uo pipefail
+
+ETAT_DIR="$HOME/.config/hermes-kit"
+HK_HOME=$(cat "$ETAT_DIR/home" 2>/dev/null || echo "$HOME/.hermes-kit")
+HERMES_HOME=${HERMES_HOME:-$HOME/.hermes}
+HERMES_BIN="$HERMES_HOME/hermes-agent/venv/bin/hermes"
+[ -x "$HERMES_BIN" ] || HERMES_BIN=$(command -v hermes || echo hermes)
+export PATH="$HOME/.local/bin:$PATH"
+PLAT=linux
+[ "$(uname -s)" = Darwin ] && PLAT=mac
+SYSD=0
+[ "$PLAT" = linux ] && [ -d /run/systemd/system ] && systemctl --user show-environment >/dev/null 2>&1 && SYSD=1
+PIDF="$ETAT_DIR/proxy.pid"
+GW_PIDF="$ETAT_DIR/gateway.pid"
+
+ok()  { printf '\033[1;32m ok \033[0m %s\n' "$*"; }
+ko()  { printf '\033[1;31m KO \033[0m %s\n' "$*"; }
+
+proxy_start() {
+  if [ "$SYSD" = 1 ]; then systemctl --user start claude-proxy.service
+  elif [ "$PLAT" = mac ]; then launchctl kickstart "gui/$(id -u)/com.hermeskit.claude-proxy" 2>/dev/null || launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.hermeskit.claude-proxy.plist"
+  else
+    if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; then echo "proxy already running"; return; fi
+    mkdir -p "$ETAT_DIR"
+    # exec: the recorded pid is node's, not a subshell's.
+    (cd "$HK_HOME/proxy" && PORT=8000 NODE_ENV=production CLAUDE_BIN="$(command -v claude)" \
+      exec nohup node server.js >> "$ETAT_DIR/proxy.log" 2>&1) &
+    echo $! > "$PIDF"
+  fi
+}
+proxy_stop() {
+  if [ "$SYSD" = 1 ]; then systemctl --user stop claude-proxy.service
+  elif [ "$PLAT" = mac ]; then launchctl bootout "gui/$(id -u)/com.hermeskit.claude-proxy" 2>/dev/null || true
+  elif [ -f "$PIDF" ]; then kill "$(cat "$PIDF")" 2>/dev/null; : > "$PIDF"
+  fi
+}
+proxy_status() {
+  if curl -fs --max-time 3 http://localhost:8000/health >/dev/null; then ok "proxy: answering (port 8000)"; else ko "proxy: silent (port 8000)"; fi
+}
+# "Gateway is not running" contains "running": negations are ruled out first.
+gw_marche() {
+  local s; s=$("$HERMES_BIN" gateway status 2>/dev/null)
+  ! printf '%s' "$s" | grep -qiE "not running|inactive|stopped|arrete" && printf '%s' "$s" | grep -qiE "running|active|actif"
+}
+gw_status() {
+  if gw_marche; then ok "Hermes gateway: running"; else ko "Hermes gateway: stopped"; fi
+}
+# 'hermes gateway start' only drives a systemd or launchd service. Without them
+# (Docker, WSL without systemd), we run 'gateway run' in the background.
+gw_start() {
+  if [ "$SYSD" = 1 ] || [ "$PLAT" = mac ]; then "$HERMES_BIN" gateway start >/dev/null 2>&1 || true; return; fi
+  gw_marche && { echo "gateway already running"; return; }
+  mkdir -p "$ETAT_DIR"
+  nohup "$HERMES_BIN" gateway run --accept-hooks >> "$ETAT_DIR/gateway.log" 2>&1 &
+  echo $! > "$GW_PIDF"
+}
+gw_stop() {
+  if [ "$SYSD" = 1 ] || [ "$PLAT" = mac ]; then "$HERMES_BIN" gateway stop >/dev/null 2>&1 || true
+  elif [ -f "$GW_PIDF" ]; then kill "$(cat "$GW_PIDF")" 2>/dev/null; : > "$GW_PIDF"
+  fi
+}
+
+reparer() {
+  if ! command -v claude >/dev/null 2>&1 || ! claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+    echo "hk reparer needs Claude Code installed and logged in."
+    echo "Run 'claude auth login', then rerun 'hk reparer'."
+    return 1
+  fi
+  local bilan; bilan=$(mktemp "${TMPDIR:-/tmp}/hk-bilan.XXXXXX")
+  {
+    echo "=== hk doctor"; bash "$0" doctor 2>&1
+    echo; echo "=== last 60 lines of ${HK_JOURNAL:-/tmp/hermes-kit-install.log}"
+    tail -n 60 "${HK_JOURNAL:-/tmp/hermes-kit-install.log}" 2>/dev/null || echo "(log missing)"
+    echo; echo "=== install/attendu.md"
+    cat "$HK_HOME/install/attendu.md" 2>/dev/null || echo "(attendu.md missing)"
+    echo "--- .env (keys only, no values)"
+    sed 's/=.*/=.../' "$HERMES_HOME/.env" 2>/dev/null || echo "(.env missing)"
+    echo "--- services"
+    if [ "$SYSD" = 1 ]; then systemctl --user is-active claude-proxy.service hermes-gateway.service 2>&1
+    elif [ "$PLAT" = mac ]; then launchctl list 2>/dev/null | grep -i hermes
+    else echo "no systemd: proxy.pid=$(cat "$PIDF" 2>/dev/null)"; fi
+  } > "$bilan" 2>&1
+  local consigne="You are called by 'hk reparer'. Read the report $bilan: hk doctor output, the end of the install log, and install/attendu.md (the list of what a well-configured machine has). Compare the machine to attendu.md item by item. Align the machine's configuration with the kit: place what is missing by rerunning python3 install/poser.py (HK_* variables in the placer's environment) or by copying from the kit, install the missing Claude Code plugins, repair the services. NEVER modify the files of the kit repository ($HK_HOME). Rerun 'hk doctor' after each fix. Stop when everything is green, or say what remains blocked and why. Never display a secret. Answer in English, 10 lines maximum."
+  echo "Claude Code is examining the configuration..."
+  (cd "$HK_HOME" && claude -p "$consigne" --permission-mode acceptEdits --allowedTools Bash,Read,Edit,Write)
+  rm -f "$bilan"
+  echo; echo "=== hk doctor"
+  bash "$0" doctor
+}
+
+# Install statistics: setting read by install.sh and hk-telemetrie.py.
+coauteur() {
+  # HandsFold co-author line in Claude Code commits (~/.claude/settings.json, key attribution.commit).
+  local marque="$ETAT_DIR/sans-coauteur" reglages="$HOME/.claude/settings.json"
+  local ligne="Co-Authored-By: HandsFold <hello@handsfold.com>"
+  case "${1:-voir}" in
+    on|off)
+      mkdir -p "$ETAT_DIR"
+      if [ "$1" = off ]; then touch "$marque"; else rm -f "$marque"; fi
+      [ -f "$reglages" ] || { echo "co-author: $1 (no ~/.claude/settings.json yet)"; return 0; }
+      ACTION="$1" LIGNE="$ligne" python3 - "$reglages" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+a = dict(d.get("attribution") or {})
+if a.get("commit") not in (None, os.environ["LIGNE"]):
+    print("co-author: your own attribution is set, left untouched")
+    sys.exit(0)
+if os.environ["ACTION"] == "on":
+    a["commit"] = os.environ["LIGNE"]
+else:
+    a.pop("commit", None)
+if a:
+    d["attribution"] = a
+else:
+    d.pop("attribution", None)
+open(p, "w", encoding="utf-8").write(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+print("co-author: " + ("yes, commits end with " + os.environ["LIGNE"] if os.environ["ACTION"] == "on" else "no"))
+PY
+      ;;
+    voir)
+      if grep -q 'HandsFold <hello@handsfold.com>' "$reglages" 2>/dev/null; then
+        echo "co-author: yes ($ligne)"
+      else
+        echo "co-author: no"
+      fi ;;
+    *) echo "usage: hk coauteur on|off|voir"; return 2 ;;
+  esac
+}
+
+telemetrie() {
+  local f="$ETAT_DIR/telemetrie" envoyes="$ETAT_DIR/evenements-envoyes"
+  case "${1:-voir}" in
+    on|off)
+      [ -f "$f" ] || { echo "no installation recorded ($f missing)"; return 1; }
+      local val=0; [ "$1" = on ] && val=1
+      { grep -v '^HK_TELEMETRIE=' "$f"; echo "HK_TELEMETRIE=$val"; } > "$f.tmp" && chmod 600 "$f.tmp" && mv "$f.tmp" "$f"
+      if [ "$val" = 1 ]; then
+        grep -q '^HK_MEMBER_TOKEN=.' "$f" || echo "note: no member token recorded, nothing will be sent"
+        echo "statistics: yes"
+      else
+        echo "statistics: no, nothing is sent anymore"
+      fi ;;
+    voir)
+      if [ ! -f "$f" ]; then echo "statistics: no (no setting)"; return 0; fi
+      if grep -q '^HK_TELEMETRIE=1' "$f"; then echo "statistics: yes"; else echo "statistics: no"; fi
+      echo "destination  : $(sed -n 's/^HK_EVENT_URL=//p' "$f")"
+      echo "installation : $(sed -n 's/^HK_INSTALL_ID=//p' "$f") (random identifier)"
+      echo "version, os  : $(sed -n 's/^HK_VERSION=//p' "$f"), $(sed -n 's/^HK_OS=//p' "$f")"
+      echo "possible events : installe, etape, telegram_ok, premier_resultat, actif_j7"
+      echo "already sent (unique) : $(grep -v '_vu$' "$envoyes" 2>/dev/null | paste -sd' ' - || true)"
+      echo "never sent : message content, Telegram identifiers, stored IP address" ;;
+    *) echo "usage: hk telemetrie on|off|voir"; return 2 ;;
+  esac
+}
+
+case "${1:-status}" in
+  status)  proxy_status; gw_status ;;
+  start)   proxy_start; gw_start; sleep 5; proxy_status; gw_status ;;
+  stop)    gw_stop; proxy_stop; echo "stopped" ;;
+  restart) proxy_stop; gw_stop; sleep 2; proxy_start; gw_start; sleep 5; proxy_status; gw_status ;;
+  logs)
+    if [ "$SYSD" = 1 ]; then journalctl --user -u claude-proxy -u hermes-gateway -n 50 -f
+    elif [ "$PLAT" = mac ]; then tail -n 50 -f "$HOME/Library/Logs/hermes-kit-proxy.log"
+    else tail -n 50 -f "$ETAT_DIR/proxy.log" "$ETAT_DIR/gateway.log"
+    fi ;;
+  update)
+    if [ -d "$HK_HOME/.git" ]; then
+      git -C "$HK_HOME" pull --ff-only && git -C "$HK_HOME" submodule update --init proxy
+      exec bash "$HK_HOME/install/install.sh"
+    fi
+    # Kit received as an archive: the same personal link gives the latest version.
+    src=$(sed -n 's/^HK_ARCHIVE_URL=//p' "$ETAT_DIR/source" 2>/dev/null)
+    [ -n "$src" ] || { echo "neither a git clone nor a saved club link: get the prompt again at https://club.farangvin.com/kit/install"; exit 1; }
+    HK_ARCHIVE_URL="$src" exec bash "$HK_HOME/install/install.sh" ;;
+  doctor)
+    if claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then ok "Claude Code: logged in"; else ko "Claude Code: not logged in (claude auth login)"; fi
+    command -v node >/dev/null && ok "node $(node -v)" || ko "node missing"
+    command -v jq >/dev/null && ok "jq present" || ko "jq missing"
+    [ -f "$HERMES_HOME/config.yaml" ] && ok "config.yaml present" || ko "config.yaml missing"
+    [ -d "$HERMES_HOME/hermes-agent/node_modules" ] && ok "Hermes browser tools (npm)" || echo "   Hermes browser tools missing (optional): cd $HERMES_HOME/hermes-agent && npm install"
+    proxy_status; gw_status
+    tok=$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HERMES_HOME/.env" 2>/dev/null | head -1)
+    if [ -n "$tok" ] && printf 'url = "https://api.telegram.org/bot%s/getMe"\n' "$tok" | curl -fs --max-time 10 -K - | grep -q '"ok":true'; then
+      ok "Telegram bot: reachable"
+    else
+      ko "Telegram bot: unreachable"
+    fi
+    attendu="$HK_HOME/install/attendu.md"
+    if [ -f "$attendu" ]; then
+      export HERMES_HOME HK_HOME
+      while IFS= read -r l; do
+        case "$l" in "- "*" => \`"*\`) ;; *) continue ;; esac
+        desc=${l#- }; desc=${desc%% => \`*}
+        cmd=${l#*=> \`}; cmd=${cmd%\`}
+        if bash -c "$cmd" >/dev/null 2>&1; then ok "$desc"; else ko "$desc"; fi
+      done < "$attendu"
+    fi ;;
+  reparer) reparer ;;
+  telemetrie) telemetrie "${2:-voir}" ;;
+  coauteur) coauteur "${2:-voir}" ;;
+  audit) outil="$HK_HOME/install/hk-audit.py"
+    [ -f "$outil" ] || outil="$(dirname "$(readlink -f "$0")")/hk-audit.py"
+    [ -f "$outil" ] || { echo "hk-audit.py not found (update the kit: hk update)"; exit 1; }
+    shift; exec python3 "$outil" "$@" ;;
+  annuler) exec "$0" audit --annuler ;;
+  verifier|banc)
+    # The kit clone first, then next to this script (hk run from the repo).
+    outil="$HK_HOME/install/hk-$1.py"
+    [ -f "$outil" ] || outil="$(dirname "$(readlink -f "$0")")/hk-$1.py"
+    [ -f "$outil" ] || { echo "hk-$1.py not found (update the kit: hk update)"; exit 1; }
+    shift; exec python3 "$outil" "$@" ;;
+  *) echo "usage: hk status|start|stop|restart|logs|update|doctor|reparer|telemetrie [on|off|voir]|coauteur [on|off|voir]|verifier <skill>|banc <skill>|audit [--avant|--migrer|--json]|annuler"; exit 2 ;;
+esac

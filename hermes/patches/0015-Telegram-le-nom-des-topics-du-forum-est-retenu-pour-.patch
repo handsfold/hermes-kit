@@ -1,0 +1,140 @@
+From d10cb06cc82a192afc2f7c4f4d1b912a62f0b12c Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Telegram : le nom des topics du forum est retenu pour la
+ carte du QG
+
+L'API Bot ne liste pas les sujets d'un forum : le nom ne passe que dans le
+message de service de creation ou de renommage (USER, 2026-10-03). Il est capte,
+ecrit dans qg.db (table noms) et qg-noms.json, et le renommage automatique fait
+par le bot y va aussi.
+
+Retouche: R17
+---
+ gateway/run_topics.py                 |  5 ++
+ plugins/platforms/telegram/adapter.py | 82 +++++++++++++++++++++++++++
+ 2 files changed, 87 insertions(+)
+
+diff --git a/gateway/run_topics.py b/gateway/run_topics.py
+index 05b6abf70a..bc01f90edb 100644
+--- a/gateway/run_topics.py
++++ b/gateway/run_topics.py
+@@ -541,6 +541,11 @@ class GatewayTopicThreadsMixin:
+                 await edit_forum_topic(chat_id=int(source.chat_id), message_thread_id=int(source.thread_id), name=topic_name)
+             except (TypeError, ValueError):
+                 await edit_forum_topic(chat_id=source.chat_id, message_thread_id=source.thread_id, name=topic_name)
++            # Le QG lit ses noms de topics dans qg.db : un renommage fait par le
++            # bot lui-meme doit y aller aussi.
++            memoriser = getattr(adapter, "_memoriser_nom_topic", None)
++            if memoriser is not None:
++                memoriser(str(source.chat_id), str(source.thread_id), topic_name)
+         except Exception:
+             logger.debug("Failed to rename Telegram topic for auto-generated title", exc_info=True)
+ 
+diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
+index c632317a42..488d04fa5b 100644
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -2740,6 +2740,12 @@ class TelegramAdapter(BasePlatformAdapter):
+         app.add_handler(TelegramMessageHandler(
+             filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.Document.ALL | filters.Sticker.ALL,
+             self._handle_media_message))
++        # Renommage d'un sujet du forum : un message de service, qu'aucun filtre
++        # ci-dessus ne laisse passer (texte, commande, media). Sans ce guetteur,
++        # le nom retenu restait celui de la creation (USER, 2026-10-03).
++        app.add_handler(TelegramMessageHandler(
++            filters.StatusUpdate.FORUM_TOPIC_EDITED | filters.StatusUpdate.FORUM_TOPIC_CREATED,
++            self._noter_nom_topic), group=98)
+         app.add_handler(CallbackQueryHandler(self._handle_callback_query))
+         # Inline command picker; inert until the owner enables inline mode via BotFather /setinline.
+         app.add_handler(InlineQueryHandler(self._handle_inline_query))
+@@ -6617,6 +6623,17 @@ class TelegramAdapter(BasePlatformAdapter):
+                     if not chat_topic:
+                         chat_topic = created_name
+         elif chat_type == "group" and thread_id_str:
++            # L'API Bot ne sait pas lister les sujets d'un forum : le seul moment
++            # ou leur nom passe, c'est le message de service de creation ou de
++            # renommage. On le capte ici, sinon la carte du QG n'a que des numeros.
++            for attr in ("forum_topic_created", "forum_topic_edited"):
++                svc = getattr(message, attr, None)
++                nom_svc = getattr(svc, "name", None) if svc else None
++                if nom_svc:
++                    self._memoriser_nom_topic(str(chat.id), thread_id_str, nom_svc)
++                    chat_topic = nom_svc
++            if not chat_topic:
++                chat_topic = self._nom_topic_connu(str(chat.id), thread_id_str)
+             # Forum topic skill binding via config.extra['group_topics']; accepts both
+             # [{"chat_id": ..., "topics": [...]}] and legacy {"-100...": [{"thread_id": 12}]}.
+             group_topics_config = self.config.extra.get("group_topics", [])
+@@ -6668,6 +6685,71 @@ class TelegramAdapter(BasePlatformAdapter):
+                 reply_to_text = None
+         return reply_to_id, reply_to_text
+ 
++    @staticmethod
++    def _chemin_qg_noms() -> str:
++        """Fichier ou sont retenus les noms des sujets de forum."""
++        from hermes_constants import get_hermes_home
++        return str(get_hermes_home() / "qg-noms.json")
++
++    def _charger_noms_topics(self) -> Dict[str, str]:
++        try:
++            with open(self._chemin_qg_noms(), encoding="utf-8") as f:
++                return json.load(f) or {}
++        except Exception:
++            return {}
++
++    def _nom_topic_connu(self, chat_id: str, thread_id: str) -> Optional[str]:
++        return self._charger_noms_topics().get(f"{chat_id}:{thread_id}") or None
++
++    async def _noter_nom_topic(self, update, context) -> None:
++        """Retient le nom d'un sujet cree ou renomme dans un forum."""
++        try:
++            m = update.effective_message
++            if m is None or not m.message_thread_id:
++                return
++            for attr in ("forum_topic_edited", "forum_topic_created"):
++                nom = getattr(getattr(m, attr, None), "name", None)
++                if nom:
++                    self._memoriser_nom_topic(str(m.chat.id), str(m.message_thread_id), nom)
++                    logger.info("Nom de topic retenu : %s -> %s", m.message_thread_id, nom)
++                    return
++        except Exception as exc:
++            logger.debug("Nom de topic non lu : %s", exc)
++
++    def _memoriser_nom_topic(self, chat_id: str, thread_id: str, nom: str) -> None:
++        """Persiste le nom d'un sujet de forum, lu ensuite par la commande `qg`.
++
++        Deux endroits : la table `noms` de qg.db, source de verite que
++        qg-noms.sh recopie chaque heure dans le JSON, et le JSON lui-meme pour
++        un effet immediat. Ecrire le JSON seul ne tenait qu'une heure.
++        """
++        cle = f"{chat_id}:{thread_id}"
++        try:
++            import sqlite3
++            from hermes_constants import get_hermes_home
++            db = sqlite3.connect(str(get_hermes_home() / "qg.db"), timeout=5)
++            db.execute(
++                "INSERT INTO noms(thread_id, nom, vu) VALUES (?, ?, strftime('%s','now')) "
++                "ON CONFLICT(thread_id) DO UPDATE SET nom=excluded.nom, vu=excluded.vu",
++                (str(thread_id), nom))
++            db.commit()
++            db.close()
++        except Exception as exc:
++            logger.debug("Nom de topic hors de qg.db (%s): %s", cle, exc)
++        try:
++            d = self._charger_noms_topics()
++            if d.get(cle) == nom and d.get(str(thread_id)) == nom:
++                return
++            d[cle] = nom
++            d[str(thread_id)] = nom
++            chemin = self._chemin_qg_noms()
++            tmp = chemin + ".tmp"
++            with open(tmp, "w", encoding="utf-8") as f:
++                json.dump(d, f, ensure_ascii=False, indent=1)
++            os.replace(tmp, chemin)
++        except Exception as exc:
++            logger.debug("Nom de topic non memorise (%s): %s", cle, exc)
++
+     def _build_message_event(self, message: Message, msg_type: MessageType, update_id: Optional[int] = None) -> MessageEvent:
+         """Build a MessageEvent from a Telegram message. ``update_id`` lets ``/restart`` record the
+         triggering offset so the new gateway process advances past it."""

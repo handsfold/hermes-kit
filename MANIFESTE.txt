@@ -1,0 +1,109 @@
+# Liste blanche de ce qui entre dans hermes-kit. Rien d'autre n'y entre.
+# Format : <source sur le poste source>  ->  <destination dans le depot>
+# Un chemin absent d'ici n'est jamais copie. Lu par outils/importer.sh.
+# Exclus d'office : .git, node_modules, __pycache__, .venv, *.bak*, .curator_backups
+#
+# Phase 2 (a venir) : chaque ligne s'active quand son contenu est desidentifie.
+~/.claude/outils/                 ->  claude/outils/
+~/.claude/hooks/                  ->  claude/hooks/
+~/.claude/RTK.md                  ->  claude/RTK.md
+~/.claude/CLAUDE.md               ->  claude/CLAUDE.md
+~/.claude/output-styles/          ->  claude/output-styles/
+~/.claude/settings.json           ->  claude/settings.json
+~/.claude/agents/                 ->  claude/agents/
+~/.claude/statusline-command.sh    ->  claude/statusline-command.sh
+# plugins : les versions bilingues de plugins-essai (menus Telegram, mode-objectif et aiguilleur) ; outils/apres-import.sh
+# retire /mwbot du plugin des menus et jette tout autre dossier. Le dossier plugins/ vivant n'est plus importe.
+~/.hermes/plugins-essai/          ->  hermes/plugins/
+# ~/.hermes/scripts/ : fichier par fichier ci-dessous (les scripts lies a des projets prives restent dehors)
+# ~/.hermes/skills/<generiques>     ->  hermes/skills/
+# ~/Bureau/Projets/business/sites/pixelgarde-bilingue/app/  ->  pixelgarde/app/ (version bilingue)
+# ~/Bureau/Projets/contexte/bin/pixel/          ->  pixelgarde/bin/
+~/.hermes/scripts/qg.py  ->  hermes/scripts/qg.py
+~/.hermes/scripts/qg-attente.py  ->  hermes/scripts/qg-attente.py
+~/.hermes/scripts/usage-timer.py  ->  hermes/scripts/usage-timer.py
+~/.hermes/scripts/qg-config.py  ->  hermes/scripts/qg-config.py
+~/.hermes/scripts/veille-ia.py  ->  hermes/scripts/veille-ia.py
+~/.hermes/scripts/qg-facteur.py  ->  hermes/scripts/qg-facteur.py
+~/.hermes/scripts/qg-pouls.py  ->  hermes/scripts/qg-pouls.py
+~/.hermes/scripts/qg-resumer.py  ->  hermes/scripts/qg-resumer.py
+~/.hermes/scripts/coach_qg.py  ->  hermes/scripts/coach_qg.py
+~/.hermes/scripts/coach_questions.py  ->  hermes/scripts/coach_questions.py
+~/.hermes/scripts/focus.py  ->  hermes/scripts/focus.py
+~/.hermes/scripts/focus-coach.py  ->  hermes/scripts/focus-coach.py
+~/.hermes/scripts/focus-relance.py  ->  hermes/scripts/focus-relance.py
+~/.hermes/scripts/journal.py  ->  hermes/scripts/journal.py
+~/.hermes/scripts/missions.py  ->  hermes/scripts/missions.py
+~/.hermes/scripts/apprendre.py  ->  hermes/scripts/apprendre.py
+~/.hermes/scripts/appris-revue.py  ->  hermes/scripts/appris-revue.py
+~/.hermes/scripts/pieces.py  ->  hermes/scripts/pieces.py
+~/.hermes/scripts/recus.py  ->  hermes/scripts/recus.py
+~/.hermes/scripts/retro-extract.py  ->  hermes/scripts/retro-extract.py
+~/.hermes/scripts/veilleur.py  ->  hermes/scripts/veilleur.py
+~/.hermes/scripts/tours-veilleur.py  ->  hermes/scripts/tours-veilleur.py
+~/.hermes/scripts/quota-veilleur.py  ->  hermes/scripts/quota-veilleur.py
+~/.hermes/scripts/amorce-quota.py  ->  hermes/scripts/amorce-quota.py
+~/.hermes/scripts/redemarrer-gateway-au-calme.sh  ->  hermes/scripts/redemarrer-gateway-au-calme.sh
+~/.hermes/scripts/redem-sur.sh  ->  hermes/scripts/redem-sur.sh
+# Mise a jour sure d'Hermes : essai jetable, bascule, retour en 1 commande
+~/.hermes/scripts/hermes-maj-sure.sh  ->  hermes/scripts/hermes-maj-sure.sh
+~/.hermes/scripts/hermes-verif.sh  ->  hermes/scripts/hermes-verif.sh
+~/.hermes/scripts/hermes-verif-apres.sh  ->  hermes/scripts/hermes-verif-apres.sh
+~/.hermes/scripts/hermes-reglages.py  ->  hermes/scripts/hermes-reglages.py
+~/.hermes/scripts/hermes-maj-hebdo.sh  ->  hermes/scripts/hermes-maj-hebdo.sh
+~/.hermes/scripts/redem_pouls.py  ->  hermes/scripts/redem_pouls.py
+~/.hermes/scripts/tests/test_redem_sur.sh  ->  hermes/scripts/tests/test_redem_sur.sh
+~/.config/systemd/user/hermes-maj-hebdo.timer  ->  install/services/hermes-maj-hebdo.timer
+~/.config/systemd/user/hermes-maj-hebdo.service  ->  install/services/hermes-maj-hebdo.service
+~/.hermes/scripts/openwebui-update-check.py  ->  hermes/scripts/openwebui-update-check.py
+~/.hermes/scripts/qg_adresse.py  ->  hermes/scripts/qg_adresse.py
+
+# ~/.hermes/skills/ : seulement les skills ecrites ici et utiles a tous (20 sur 180 ; le reste est perso ou tiers)
+~/.hermes/skills/fait-manquant/  ->  hermes/skills/fait-manquant/
+~/.hermes/skills/reframer/  ->  hermes/skills/reframer/
+~/.hermes/skills/meta/retro-agent/  ->  hermes/skills/meta/retro-agent/
+~/.hermes/skills/dev/verifier-avant-livraison/  ->  hermes/skills/dev/verifier-avant-livraison/
+~/.hermes/skills/dev/crawl4ai-scraper/  ->  hermes/skills/dev/crawl4ai-scraper/
+~/.hermes/skills/dev/chrome-forensics/  ->  hermes/skills/dev/chrome-forensics/
+~/.hermes/skills/media/video-transcription/  ->  hermes/skills/media/video-transcription/
+~/.hermes/skills/research/recherche-profonde/  ->  hermes/skills/research/recherche-profonde/
+~/.hermes/skills/research/recherche-thai/  ->  hermes/skills/research/recherche-thai/
+~/.hermes/skills/research/anti-bot-web-reading/  ->  hermes/skills/research/anti-bot-web-reading/
+~/.hermes/skills/research/bitcoin-address-datasets/  ->  hermes/skills/research/bitcoin-address-datasets/
+~/.hermes/skills/devops/systemd-service-operations/  ->  hermes/skills/devops/systemd-service-operations/
+~/.hermes/skills/devops/hermes-telegram-topics/  ->  hermes/skills/devops/hermes-telegram-topics/
+~/.hermes/skills/devops/cloud-cost-guard/  ->  hermes/skills/devops/cloud-cost-guard/
+~/.hermes/skills/autonomous-ai-agents/browser-powered-social-media/  ->  hermes/skills/autonomous-ai-agents/browser-powered-social-media/
+~/.hermes/skills/mlops-models/groq_whisperer/  ->  hermes/skills/mlops-models/groq_whisperer/
+~/.hermes/skills/security/android-device-control/  ->  hermes/skills/security/android-device-control/
+~/.hermes/skills/security/wallet-entropy-audit/  ->  hermes/skills/security/wallet-entropy-audit/
+~/.hermes/skills/software-development/parallel-scan-optimization/  ->  hermes/skills/software-development/parallel-scan-optimization/
+
+# PixelGarde : l'appli Android (la pastille) et les scripts qui pilotent le telephone par ADB
+~/Bureau/Projets/business/sites/pixelgarde-bilingue/app/  ->  pixelgarde/app/
+~/Bureau/Projets/contexte/bin/pixel/  ->  pixelgarde/bin/
+~/Bureau/Projets/business/sites/pixelgarde-bilingue/relais/creeper-relais.py  ->  pixelgarde/bin/creeper-relais.py
+
+# ~/.claude/skills/ : seulement les skills ecrites ici et utiles a tous (6 sur 19 ; gstack et les tierces restent dehors)
+~/.claude/skills/nouveau-projet/  ->  claude/skills/nouveau-projet/
+~/.claude/skills/forget/  ->  claude/skills/forget/
+~/.claude/skills/r/  ->  claude/skills/r/
+# 2026-10-26 : mesurer toute conso (sonde + controle-mesure.py dans claude/outils, minuteur quotidien)
+~/.claude/skills/mesure-partout/  ->  claude/skills/mesure-partout/
+~/.config/systemd/user/controle-mesure.service  ->  install/services/controle-mesure.service
+~/.config/systemd/user/controle-mesure.timer  ->  install/services/controle-mesure.timer
+~/.claude/skills/update-all-skills/  ->  claude/skills/update-all-skills/
+~/.claude/skills/trouver-skill/  ->  claude/skills/trouver-skill/
+~/.claude/skills/fabrique-skill/  ->  claude/skills/fabrique-skill/
+
+# 2026-10-13 : boucle d'apprentissage (apprendre.py lance capter.py et boucle.py),
+# garde de focus Chrome, standard vocal du QG, sentinelle des systemes de revue.
+~/.hermes/apprentissage/bin/  ->  hermes/apprentissage/bin/
+# 2026-10-25 : le hook qui injecte les regles apprises a chaque tour (sans lui la boucle
+# n'agit qu'a la session suivante). Porte aussi le filtre des Hermes isoles (bancs d'essai).
+~/.hermes/agent-hooks/injecter-regles.py  ->  hermes/agent-hooks/injecter-regles.py
+~/Bureau/Projets/perso/outils/opencli-humain/fenetre-par-agent.py  ->  hermes/opencli-humain/fenetre-par-agent.py
+~/Bureau/Projets/perso/outils/opencli-humain/appliquer.sh  ->  hermes/opencli-humain/appliquer.sh
+~/Bureau/Projets/contexte/bin/qg/qg-standard.py  ->  pixelgarde/qg/qg-standard.py
+~/.config/systemd/user/sentinelle-revue.service  ->  install/services/sentinelle-revue.service
+~/.config/systemd/user/sentinelle-revue.timer  ->  install/services/sentinelle-revue.timer

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Le fond de l'icone adaptative : le vert sombre du creeper, assez
+         fonce pour que le visage clair s'en detache sur un fond blanc. -->
+    <color name="creeper_fond">#FF15361F</color>
+</resources>

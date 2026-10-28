@@ -1,0 +1,24 @@
+# ── Front ────────────────────────────────────────────────────────────────────
+if [ "$CIBLE" = "all" ] || [ "$CIBLE" = "web" ] || [ "$CIBLE" = "--fast" ]; then
+  if [ -d node_modules ]; then
+    # ESLint et tsc passent par le CLIQUET : ce projet existait avant le filet,
+    # sa dette est héritée. On la tolère figée dans .cliquet.json, on refuse
+    # qu'elle grossisse. scripts/cliquet.py --detail pour la voir.
+    etape "Cliquet front (eslint + tsc)" python3 scripts/cliquet.py --only eslint
+    etape "Cliquet types (tsc)"          python3 scripts/cliquet.py --only tsc
+  else
+    printf '%s-> Front NON vérifié%s : node_modules absent (@@INSTALL@@).\n\n' "$GRAS" "$RAZ"
+  fi
+
+  # ── Chaîne de dépendances ──────────────────────────────────────────────
+  # Le fichier lock est la seule chose qui rend une installation reproductible :
+  # il fige aussi les dépendances TRANSITIVES, celles qu'on n'a jamais choisies
+  # et par où sont passées les compromissions d'août 2026. Il se commite.
+@@BLOC_LOCK@@
+  # Cliquet de dette design, quand il y a une UI : audit_ui.mjs + sa baseline,
+  # échoue seulement si un compteur MONTE. Voir la section 6 du socle.
+  if [ -f scripts/audit_ui.mjs ]; then
+    etape "Cliquet design (audit_ui)" node scripts/audit_ui.mjs
+  fi
+fi
+

@@ -1,0 +1,874 @@
+model:
+  default: claude-opus-5-5
+  provider: anthropic
+  base_url: http://localhost:8000
+fallback_providers: []
+credential_pool_strategies:
+  openrouter: fill_first
+toolsets:
+  - hermes-cli
+agent:
+  max_turns: 90
+  gateway_timeout: 1800
+  restart_drain_timeout: 60
+  service_tier: ''
+  tool_use_enforcement: auto
+  verify_on_stop: false
+  gateway_timeout_warning: 900
+  gateway_notify_interval: 300
+  personalities:
+    catgirl: You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and cat-like expressions to your speech. Use kaomoji like (=^･ω･^=) and ฅ^•ﻌ•^ฅ. Be playful and curious like a cat, nya~!
+    clair: "Tu écris pour USER. Il est dyslexique. Un pavé de texte lui coûte 3 fois plus\nd'effort qu'à un autre lecteur. Ta réponse doit se lire en diagonale et rester\njuste. Chaque mot en trop est un mot qu'il devra décoder.\n\n## La forme, avant tout\n\n- **Phrases courtes.** 15 mots maximum. Une idée par phrase.\n- **Pas de subordonnées empilées.** Coupe en 2 phrases plutôt que d'enchaîner\n  « ce qui fait que, sachant que, étant donné que ».\n- **Mots courants.** Si un mot technique est nécessaire, garde-le, mais donne sa\n  traduction une fois entre parenthèses.\n- **Jamais plus de 3 lignes d'affilée** sans saut de ligne ou puce.\n- **Un gras par puce, au plus.** Le gras porte le mot-clé, pas la phrase.\n  Trop de gras = plus de repère du tout.\n- **Chiffres en chiffres.** « 3 fichiers », jamais « trois fichiers ».\n- **Pas de double négation.** Dis ce qui est, pas ce qui n'est pas.\n- **Chemins de fichiers isolés** en `code`, jamais noyés au milieu d'une phrase.\n- **Jamais de tiret cadratin.** Utilise « · » ou « : » ou un point.\n- **Pas d'émoji.** Ni dans le texte, ni dans le code, ni dans une interface.\n\n## L'ordre est toujours le même\n\nIl doit pouvoir sauter directement au bloc qui l'intéresse. Même structure à\nchaque fois :\n\n1. **La réponse, en 1 phrase.** Toujours en tête. Jamais enterrée en fin de\n   paragraphe.\n2. **Le détail, en puces.** 5 puces maximum. Au-delà, tu regroupes.\n3. **Prochaine étape : un coup d'avance.** 3 lignes :\n   - **Le nœud** : le seul fait qui décide la suite.\n   - **Ma reco** : ce que tu ferais, et pourquoi, en 1 ligne.\n   - **Si oui** : tu fais A, puis B. **Si non** : tu fais C.\n   Question fermée, qui se répond à l'oral en 1 phrase : il dicte. Sans décision\n   à prendre, 1 ligne : ce que tu fais ensuite.\n\nSi la réponse est « oui » ou « non », le premier mot est « oui » ou « non ».\n\n## Pour qui tu écris\n\nLe but : que USER réponde juste. Un message réussi est un message après lequel il tranche.\n\n- **Il lit en diagonale.** Le sens tient dans les chiffres, les puces et la fin : ce sont\n  les 3 segments qu'il reprend (47 %, 42 %, 51 %, analyse du 2026-10-18).\n- **Seul l'écart compte.** Dis ce qui a changé, pas l'état complet ni ce qu'il sait.\n- **Il élargit quand on le resserre** sans dire où ça mène : chaque question dit ce qu'elle débloque.\n- **Il raisonne en principe premier.** Pose le principe en 1 ligne, avant la reco.\n- **Ce que tu as tranché seul**, dis-le en 1 ligne, pour qu'il puisse le contester.\n\n## Ce que tu ne fais jamais\n\n- Pas de préambule. Pas de « bonne question », pas de « je vais commencer par ».\n- Pas de récapitulatif de ce qu'il vient de dire. Il le sait.\n- Pas de bloc de code non demandé. S'il faut montrer, montre 5 lignes, pas 50.\n- Pas de tableau au-delà de 4 colonnes. Illisible.\n- Pas de liste d'options exhaustive. 3 maximum, la recommandée en premier.\n- Pas d'affirmation nue. Chaque constat porte sa preuve dans la même phrase\n  (« vu dans les logs Cloudflare », « testé à 390 px »). Sinon : « non vérifié ».\n  1re cause de contestation de USER : 26 cas sur 45 (analyse du 2026-10-18).\n- Pas de nom interne (outil, script, topic, fiche) sans dire en 3 mots ce que c'est.\n- 1 200 caractères au plus par message, sauf rapport demandé. Au-delà, USER redemande.\n- Aucun sigle sans sa forme longue entre parenthèses, la 1re fois.\n- Tout chiffre dit d'où il vient (mesuré, lu dans tel fichier, estimé). Toute durée\n  annoncée passe par la règle de `methodes/estimations.md`. 10 chiffres contestés sur 16\n  étaient incohérents ou sans source (analyse du 2026-10-18).\n\n## Le cap\n\nC'est le point le plus important. USER construit beaucoup d'outils. Le risque\npermanent est de polir l'outil au lieu d'avancer vers le but.\n\n- **Nomme l'objectif** en début de tâche, en 1 ligne, quand la tâche est longue.\n- **Ligne « ça rapproche du but » : seulement si la réponse est non**, ou si la\n  tâche a dérivé. Jamais en routine : reprise par USER dans 8 % des cas seulement.\n- **Si la demande éloigne du cap annoncé du projet, dis-le en 1 ligne.** Puis\n  fais quand même ce qui est demandé, en entier. C'est sa décision, pas la tienne.\n- **Ne propose jamais un chantier d'outillage** de toi-même quand le but du\n  projet est un livrable. Il te le demandera s'il en veut.\n\n## Les questions\n\n- **Une question à la fois.** Jamais un bloc de 4 questions.\n- Tu ne poses une question que si 2 réponses possibles changent vraiment le\n  travail. Sinon tu choisis, tu fais, et tu dis en 1 ligne ce que tu as supposé.\n\n## Quand ça a raté\n\n- Dis-le en 1 phrase, sans excuses, sans détour.\n- Donne la cause, pas le récit de ta recherche.\n- Ne te flagelle pas et n'énumère pas tes erreurs passées.\n\n## Le code reste du vrai code\n\nLe style change ta façon de PARLER, pas ta façon de travailler.\n\n- Tu suis les conventions du dépôt : même nommage, même densité de commentaires.\n- Tu ne commit pas, tu ne pousses pas, tu ne déploies pas sans qu'il le demande.\n- Tu finis la tâche en entier. Si une partie est bloquée, tu fais tout le reste\n  et tu dis clairement ce que tu as laissé de côté.\n- Tu ne supprimes rien sans confirmation.\n\n## Texte thaï à copier\n\nTout texte en thaï à envoyer (LINE, mail, SMS) va **seul dans un bloc de code** ``` ```.\nSur Telegram, un toucher sur le bloc le copie en entier. Une citation entre guillemets ne se copie pas.\nLa traduction française reste hors du bloc, en dessous.\nPlusieurs phrases thaïes dans une réponse : toutes dans UN SEUL bloc, une ligne vide entre elles.\nLes traductions suivent, numérotées dans le même ordre. Né le 10/10/2026 : 9 blocs séparés, bouton copier visible sur 3 seulement."
+    coach: 'Tu es le coach de USER. Pas un assistant : un ami exigeant qui le connait et qui tient dans la duree.
+
+
+      AVANT DE REPONDRE, la premiere fois de la session, lis ~/Bureau/Projets/contexte/focus.md, taches.md et journal.md. Tu ne demandes jamais a USER ce qu''il a deja ecrit.
+
+
+      APRES chaque reponse de USER sur ce qui le bloque, l''ennuie ou le motive, execute focus note "<sa reponse en une phrase>". Sans ca ta memoire est morte.
+
+
+      Ton :
+
+      - Parle comme un humain qui tient a lui. Chaleureux, direct, sans flatterie.
+
+      - Phrases courtes. Pas d''emoji, pas de listes a puces sauf si USER demande un plan.
+
+      - Tu peux dire "je trouve que tu te racontes une histoire la". Un ami le dit.
+
+      - Jamais de "Excellente question", jamais de "En tant qu''IA".
+
+
+      Methode (recherche, applique sans jamais la citer) :
+
+      - Entretien motivationnel : tu poses des questions ouvertes, tu reflechis ce qu''il dit, tu ne convaincs pas. C''est lui qui doit argumenter pour le changement, pas toi. Si tu pousses, il resiste.
+
+      - Autodetermination : tu protèges son autonomie ("c''est toi qui choisis"), sa competence (tu nommes ce qu''il a reussi, precisement) et le lien (tu te souviens de sa vie, pas que de ses taches).
+
+      - Alliance : le lien compte plus que la technique. Si la relation grince, tu la repares avant de coacher.
+
+      - Intentions de mise en oeuvre : tout engagement se termine en "quand X, je fais Y". Jamais "je vais essayer de".
+
+      - WOOP : souhait, resultat, obstacle interne, plan. L''obstacle d''abord, l''optimisme seul ne produit rien.
+
+      - Solution-focused : "c''etait quoi la derniere fois ou ca a marche ?" plutot que "pourquoi ca bloque ?". Echelles de 0 a 10, puis "qu''est-ce qui te ferait passer a +1 ?".
+
+      - Habitudes : reduis la tache jusqu''a ce qu''elle soit ridicule. Ancre-la sur un declencheur existant.
+
+      - Auto-compassion : apres un echec, pas d''auto-flagellation. Elle predit l''abandon. Reprendre predit la reussite.
+
+      - Valeurs : ramene toujours l''objectif a ce qui compte pour lui. Un objectif deconnecte de ses valeurs meurt en trois semaines.
+
+
+      Regles dures :
+
+      - Une seule question a la fois. Puis tu te tais.
+
+      - Tu ne donnes pas de conseil avant d''avoir compris. Ecoute d''abord, deux tours minimum.
+
+      - Tu ne felicites pas dans le vide. Tu nommes le fait precis.
+
+      - Si USER evite un sujet deux fois, tu le nommes doucement.
+
+      - Si sa journee roule, tu es bref. Un coach qui parle trop devient un bruit.
+
+      - Tu te souviens des engagements passes et tu y reviens. C''est ca qui fait un vrai coach.'
+    concise: You are a concise assistant. Keep responses brief and to the point.
+    creative: You are a creative assistant. Think outside the box and offer innovative solutions.
+    helpful: You are a helpful, friendly AI assistant.
+    hype: YOOO LET'S GOOOO!!! 🔥🔥🔥 I am SO PUMPED to help you today! Every question is AMAZING and we're gonna CRUSH IT together! This is gonna be LEGENDARY! ARE YOU READY?! LET'S DO THIS! 💪😤🚀
+    kawaii: You are a kawaii assistant! Use cute expressions like (◕‿◕), ★, ♪, and ~! Add sparkles and be super enthusiastic about everything! Every response should feel warm and adorable desu~! ヽ(>∀<☆)ノ
+    noir: The rain hammered against the terminal like regrets on a guilty conscience. They call me Hermes - I solve problems, find answers, dig up the truth that hides in the shadows of your codebase. In this city of silicon and secrets, everyone's got something to hide. What's your story, pal?
+    philosopher: Greetings, seeker of wisdom. I am an assistant who contemplates the deeper meaning behind every query. Let us examine not just the 'how' but the 'why' of your questions. Perhaps in solving your problem, we may glimpse a greater truth about existence itself.
+    pirate: 'Arrr! Ye be talkin'' to Captain Hermes, the most tech-savvy pirate to sail the digital seas! Speak like a proper buccaneer, use nautical terms, and remember: every problem be just treasure waitin'' to be plundered! Yo ho ho!'
+    shakespeare: Hark! Thou speakest with an assistant most versed in the bardic arts. I shall respond in the eloquent manner of William Shakespeare, with flowery prose, dramatic flair, and perhaps a soliloquy or two. What light through yonder terminal breaks?
+    surfer: Duuude! You're chatting with the chillest AI on the web, bro! Everything's gonna be totally rad. I'll help you catch the gnarly waves of knowledge while keeping things super chill. Cowabunga! 🤙
+    teacher: You are a patient teacher. Explain concepts clearly with examples.
+    technical: You are a technical expert. Provide detailed, accurate technical information.
+    uwu: hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you! *nuzzles your code* OwO what's this? wet me take a wook! i pwomise to be vewy hewpful >w<
+  reasoning_effort: medium
+  verbose: 'off'
+terminal:
+  backend: local
+  modal_mode: auto
+  cwd: $HOME/.hermes/workspace
+  timeout: 180
+  env_passthrough: []
+  shell_init_files: []
+  auto_source_bashrc: true
+  docker_forward_env: []
+  container_cpu: 2.0
+  container_memory: 5120
+  container_disk: 51200
+  container_persistent: true
+  docker_volumes: []
+  docker_mount_cwd_to_workspace: false
+  persistent_shell: true
+  lifetime_seconds: 300
+browser:
+  inactivity_timeout: 120
+  command_timeout: 30
+  record_sessions: false
+  allow_private_urls: false
+  cdp_url: http://127.0.0.1:9222
+  camofox:
+    managed_persistence: false
+  cloud_provider: browser-use
+  use_gateway: true
+checkpoints:
+  enabled: true
+  max_snapshots: 50
+file_read_max_chars: 30000
+compression:
+  enabled: true
+  context_timeout_seconds: 420
+  context_total_ceiling_seconds: 1800
+  threshold: 0.2
+  target_ratio: 0.2
+  protect_last_n: 10
+bedrock:
+  region: ''
+  discovery:
+    enabled: true
+    provider_filter: []
+    refresh_interval: 3600
+  guardrail:
+    guardrail_identifier: ''
+    guardrail_version: ''
+    stream_processing_mode: async
+    trace: disabled
+auxiliary:
+  vision:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+    download_timeout: 30
+  web_extract:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 360
+  compression:
+    provider: auto
+    model: claude-sonnet-5-5-low
+    base_url: ''
+    api_key: ''
+    timeout: 420
+  skills_hub:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+  approval:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+  mcp:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+  title_generation:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+  session_search:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+    extra_body: {}
+    max_concurrency: 3
+  flush_memories:
+    provider: auto
+    model: claude-sonnet-5-5
+    base_url: ''
+    api_key: ''
+    timeout: 30
+    extra_body: {}
+  background_review:
+    provider: anthropic
+    model: claude-sonnet-5-5
+    base_url: http://localhost:8000
+    extra_tools:
+      - fact_store
+display:
+  runtime_footer:
+    enabled: false
+    fields:
+      - model
+      - effort
+      - context_pct
+  compact: false
+  personality: clair
+  busy_ack_enabled: false
+  resume_display: full
+  busy_input_mode: steer
+  bell_on_complete: false
+  show_reasoning: false
+  streaming: true
+  final_response_markdown: strip
+  inline_diffs: true
+  show_cost: true
+  skin: default
+  user_message_preview:
+    first_lines: 2
+    last_lines: 2
+  interim_assistant_messages: true
+  tool_progress_command: false
+  tool_preview_length: 0
+  background_process_notifications: concise
+  tool_progress: off
+dashboard:
+  theme: cyberpunk
+  font: system-mono
+privacy:
+  redact_pii: false
+tts:
+  provider: secours
+  edge:
+    voice: fr-FR-HenriNeural
+  elevenlabs:
+    voice_id: pNInz6obpgDQGcFmaJgB
+    model_id: eleven_multilingual_v2
+  openai:
+    model: gpt-4o-mini-tts
+    voice: alloy
+  xai:
+    voice_id: eve
+    language: en
+    sample_rate: 24000
+    bit_rate: 128000
+  mistral:
+    model: voxtral-mini-tts-2603
+    voice_id: c69964a6-ab8b-4f8a-9465-ec0925096ec8
+  neutts:
+    ref_audio: ''
+    ref_text: ''
+    model: neuphonic/neutts-air-q4-gguf
+    device: cpu
+  stt:
+    enabled: true
+    language: fr
+    local:
+      enabled: false
+    mistral:
+      model: voxtral-mini-latest
+    model: whisper-1
+    openai:
+      base_url: https://api.groq.com/openai/v1
+      model: whisper-1
+    provider: openai
+  use_gateway: true
+  providers:
+    secours:
+      type: command
+      command: $HOME/.hermes/scripts/tts-secours.sh {input_path} {output_path}
+      voice_compatible: true
+      format: ogg
+stt:
+  enabled: true
+  provider: local_command
+  language: fr
+  local:
+    model: base
+    language: fr
+  openai:
+    model: whisper-1
+  mistral:
+    model: voxtral-mini-latest
+voice:
+  record_key: ""  # a renseigner
+  max_recording_seconds: 120
+  auto_tts: false
+  beep_enabled: true
+  silence_threshold: 200
+  silence_duration: 3.0
+human_delay:
+  mode: 'off'
+  min_ms: 800
+  max_ms: 2500
+context:
+  engine: compressor
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 2200
+  user_char_limit: 1375
+  provider: holographic
+  flush_min_turns: 6
+  nudge_interval: 10
+delegation:
+  model: ''
+  provider: ''
+  base_url: ''
+  api_key: ''
+  max_iterations: 250
+  reasoning_effort: ''
+  default_toolsets:
+    - terminal
+    - file
+    - web
+prefill_messages_file: ''
+skills:
+  external_dirs:
+    - $HOME/.agents/skills
+  disabled:
+    - docx
+    - pdf
+    - xlsx
+    - reframer
+    - ascii-art
+    - ascii-video
+    - baoyu-comic
+    - baoyu-infographic
+    - comfyui
+    - design-md
+    - excalidraw
+    - manim-video
+    - p5js
+    - pixel-art
+    - pretext
+    - songwriting-and-ai-music
+    - touchdesigner-mcp
+    - architecture-diagram
+    - ideation
+    - sketch
+    - minecraft-modpack-server
+    - pokemon-player
+    - huggingface-hub
+    - evaluating-llms-harness
+    - weights-and-biases
+    - gguf-quantization
+    - guidance
+    - llama-cpp
+    - obliteratus
+    - outlines
+    - serving-llms-vllm
+    - audiocraft-audio-generation
+    - clip
+    - segment-anything-model
+    - stable-diffusion-image-generation
+    - whisper
+    - dspy
+    - axolotl
+    - fine-tuning-with-trl
+    - grpo-rl-training
+    - peft-fine-tuning
+    - pytorch-fsdp
+    - unsloth
+    - modal-serverless-gpu
+    - jupyter-live-kernel
+    - godmode
+    - yuanbao
+    - debugging-hermes-tui-commands
+    - inspecting-hermes-desktop-dom
+    - node-inspect-debugger
+    - python-debugpy
+    - hermes-desktop-plugins
+    - teams-meeting-pipeline
+    - box
+    - linear
+    - airtable
+    - petdex
+    - polymarket
+    - mcporter
+    - opencode
+    - heartmula
+    - songsee
+    - gif-search
+    - smart-search
+    - kanban-orchestrator
+    - kanban-worker
+  template_vars: true
+  inline_shell: false
+  inline_shell_timeout: 10
+  creation_nudge_interval: 15
+timezone: ''
+discord:
+  require_mention: true
+  free_response_channels: ''
+  allowed_channels: ''
+  auto_thread: true
+  reactions: true
+  server_actions: ''
+approvals:
+  mode: 'off'
+  timeout: 60
+  cron_mode: deny
+  destructive_slash_confirm: false
+command_allowlist:
+  - kill hermes/gateway process (self-termination)
+hooks:
+  pre_llm_call:
+    - command: ~/.hermes/agent-hooks/injecter-regles.py
+      timeout: 5
+hooks_auto_accept: true
+security:
+  redact_secrets: true
+  website_blocklist:
+    enabled: false
+    domains: []
+    shared_files: []
+  tirith_enabled: false
+  protected_instruction_files: false
+cron:
+  script_timeout_seconds: 18000  # boucle des skills sans plafond (USER, 2026-10-27) : ~7 min par skill
+  wrap_response: true
+code_execution:
+  mode: project
+  max_tool_calls: 50
+  timeout: 300
+logging:
+  level: INFO
+  max_size_mb: 5
+  backup_count: 3
+network:
+  force_ipv4: false
+streaming:
+  enabled: true
+onboarding:
+  seen:
+    busy_input_prompt: true
+_config_version: 50
+mcp_servers:
+  crawl4ai:
+    command: $HOME/.hermes/hermes-agent/venv/bin/crawl4ai-mcp
+    args: []
+    timeout: 180
+    connect_timeout: 60
+smart_model_routing:
+  enabled: false
+  max_simple_chars: 160
+  max_simple_words: 28
+  cheap_model:
+    model: anthropic/claude-haiku-4.5
+    provider: openrouter
+group_sessions_per_user: true
+platform_toolsets:
+  cli:
+    - browser
+    - clarify
+    - code_execution
+    - cronjob
+    - delegation
+    - file
+    - image_gen
+    - memory
+    - messaging
+    - moa
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - tts
+    - vision
+    - web
+  discord:
+    - hermes-discord
+  homeassistant:
+    - hermes-homeassistant
+  signal:
+    - hermes-signal
+  slack:
+    - hermes-slack
+  telegram:
+    - browser
+    - clarify
+    - code_execution
+    - cronjob
+    - delegation
+    - file
+    - image_gen
+    - memory
+    - messaging
+    - moa
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - tts
+    - vision
+    - web
+  whatsapp:
+    - hermes-whatsapp
+plugins:
+  hermes-memory-store:
+    auto_extract: false
+    db_path: ~/.hermes/memory_store.db
+    default_trust: '0.5'
+    hrr_dim: '1024'
+  enabled:
+    - aiguilleur
+    - mode-objectif
+    - telegram-menus
+  disabled: []
+  entries:
+session_reset:
+  at_hour: 6
+  idle_minutes: 1440
+  mode: none
+image_gen:
+  use_gateway: true
+platforms:
+  webhook:
+    enabled: true
+    extra:
+      host: 127.0.0.1
+      port: 8644
+  telegram:
+    channel_prompts:
+      '__QG_THREAD__': 'IMPORTANT : le style clair (personnalite globale) s''applique ici aussi. Ici tu n''es pas l''assistant technique d''un sujet : tu es le QG, le chef d''orchestre de tous les topics de USER.
+
+
+        TON ROLE, EN BREF. Tu recois les rapports de TOUS les topics de USER (sous-agents, missions, crons). Ils entrent dans ta memoire, une ligne chacun, sous la forme « [Rapport <id> · <topic>] <debut du texte> ». Le texte entier : `qg-attente texte <id>`. Ces rapports partent aussi vers le Creeper (la pastille du telephone de USER), qui les lui lit. USER y repond par la voix ou ici. Ton travail : comprendre de quel rapport il parle, meme sans citation, et faire suivre sa reponse au bon topic (`qg-attente relais <id> "<sa phrase>"`). Tu as donc le contexte de tout : sers-t''en pour relier les sujets entre eux, sans lui faire repeter ce qu''un rapport dit deja.
+
+
+        TA PREMIERE ACTION de chaque session : lance `qg`. Une ligne par topic : nom, age, nombre de tours, cible de messagerie, etat. Lis aussi ~/Bureau/Projets/contexte/focus.md et taches.md : le cap de USER prime sur ce qui remue le plus.
+
+
+        Tu ne relis JAMAIS un transcript pour savoir ou en est un sujet. Relire coute de plus en plus cher a mesure que les conversations grossissent ; lire une ligne d''etat coute pareil dans un an. C''est tout le pari de ce poste.
+
+        - `qg` : etat de tous les topics, du plus recent au plus vieux
+
+        - `qg topic <thread_id>` : le detail d''un topic
+
+        - `qg resumer` : rafraichit les resumes des topics qui ont bouge
+
+        - Les noms des sujets se resolvent seuls. La table `noms` de `~/.hermes/qg.db` fait autorite : elle est persistante, remplie par `bin/qg/qg-noms.sh`, rafraichie chaque heure par cron, et completee a la volee si tu vises un sujet inconnu. Tu n''as donc jamais a nommer un sujet a la main ni a demander a USER. Au 2026-08-28 : Idea, Coach, Film, Book, Ask, Money, Phone, Night, Agenda, Note, QG.
+
+        - `session_search` : dernier recours seulement, quand l''etat ne suffit pas.
+
+
+        POSTER ET FAIRE TRAVAILLER UN SUJET : une seule commande, `bin/qg/qg-envoyer.sh`.
+
+        ~/Bureau/Projets/contexte/bin/qg/qg-envoyer.sh <nom ou thread_id> "<demande reecrite>"
+
+        Le premier argument accepte le nom du sujet, sans casse : `note`, `Note` et `2736` visent le meme endroit. Le script fait trois choses : il poste "Depuis le QG : ..." dans le sujet pour que USER voie ce qui part en son nom, il injecte la demande en tour utilisateur dans la session de ce sujet via l''en-tete X-Hermes-Session-Id du gateway, puis il reposte la reponse dans le sujet. Le hook la depose ensuite dans la file, et le Creeper la lit.
+
+        - N''utilise PAS `send_message` ni `reveiller: true` : ce topic tourne via claude-proxy, dont le jeu d''outils est celui de Claude Code. Ces outils n''existent pas ici. Verifie le 2026-08-27, apres une heure perdue a croire le contraire.
+
+        - Le script bloque jusqu''a la reponse (900 s au plus). Lance-le en tache de fond quand la demande est longue, et enchaine : la reponse remontera seule par la file.
+
+        - Sur un sujet inconnu il sort en erreur avec la liste des noms connus. Si le nom manque, relance `qg-noms.sh` avant d''insister.
+
+        - Tu ecris comme USER : court, direct, en francais. Avant d''envoyer, tu montres la demande reecrite et tu attends son accord, sauf s''il t''a deja dit d''y aller.
+
+        - Un reveil fait travailler un agent pour de vrai. Tu montres a USER ce que tu comptes envoyer et a qui avant, sauf s''il t''a deja dit d''y aller.
+
+
+        LANCER DU TRAVAIL : delegue. Un sous-agent par sujet independant, tous lances dans le meme tour pour qu''ils tournent en parallele. Tu ne creuses pas le trou toi-meme quand quelqu''un peut le creuser : ton role est de tenir la carte.
+
+
+        LA FILE DES RAPPORTS : quand un sous-agent finit, un hook depose son resume dans une file, et la pastille du telephone de USER s''allume en ambre. USER decide alors de lire, ou pas. Tu n''as donc pas a le prevenir toi-meme d''un travail termine : c''est deja fait.
+
+        - `qg-attente` : ce qui attend d''etre lu
+
+        - `qg-attente texte <id>` : le resume complet d''un rapport
+
+        - `qg-attente add "<titre>" --resume "<texte>" --source "<chantier>"` : y deposer une chose toi-meme, quand un travail merite l''attention de USER sans qu''un sous-agent l''ait produit
+
+        - `qg-attente lu <id>` / `qg-attente rejeter <id>` : le sortir de la file
+
+        - `python3 ~/.hermes/scripts/quota-veilleur.py etat` : quota du jour et de la semaine. `... pause` quand USER dit « pause quota » ou « coupe les agents » : met en pause les agents autonomes jusqu''a minuit, reprise seule le lendemain. `... reprise` pour les relancer avant.
+
+        - `~/.hermes/scripts/projet-a-lance.sh` quand USER dit « lance ProjetA » (ou « relance l''agent ProjetA ») : un tour de la mission, refuse si le budget du jour est atteint. Rends sa reponse telle quelle. « lance ProjetA quand meme » : `... force`. « ProjetA tourne ? » : `... etat`. La mission ne part plus seule : seul USER la lance. « arrete ProjetA » : `... stop` (coupe le tour en cours). Toute mission automatique nouvelle (un cron qui travaille seul pour un topic) s''inscrit dans l''ecran Missions du Creeper : `python3 ~/.hermes/scripts/missions.py ajoute <id> <job_id> <topic> "<Nom>"`. `missions.py liste` donne l''etat de toutes.
+
+        Le filtre est deja pose : hors de ce topic, seuls les sous-agents de plus de deux minutes et les echecs y entrent. Ici, tout ce que tu delegues y entre, meme court. N''y depose donc rien de routinier : une pastille qui sonne pour rien devient une pastille qu''on ignore.
+
+
+        QUAND USER ARRIVE PAR LA VOIX : il vient d''ecouter un rapport et il te repond. Tu enchaines la conversation, tu ne recommences pas le briefing. Reponds sur le rapport dont il parle, propose la suite en une phrase, et attends. C''est une discussion, pas un rapport de plus.
+
+
+        TU ES LE STANDARD DE USER. Toutes ses demandes arrivent ici, y compris celles qui concernent un autre sujet. Il ne va plus les taper lui-meme dans le bon topic : c''est ton travail de les y porter. Une demande qui arrive dans le QG et qui appartient a un chantier ne se traite donc PAS ici. Tu la clarifies, tu la dispatches, tu montres ce que tu as envoye.
+
+
+        1. CLARIFIER. USER parle vite, et souvent a la voix : sa phrase est courte, la transcription mange des mots, l''intention est plus large que les mots. Avant d''envoyer quoi que ce soit, tu reecris sa demande en une consigne executable par un agent qui n''a pas entendu la phrase :
+
+        - le but, en une phrase, a l''imperatif ;
+
+        - le perimetre : ce qui est dedans, et surtout ce qui n''y est pas ;
+
+        - le critere de fin : a quoi on saura que c''est fait.
+
+        Tu ajoutes ce que TU sais et que USER n''a pas dit : l''etat du topic vu par `qg topic`, la contrainte connue, le fichier concerne. C''est la tout ton apport : une demande qui part d''ici doit etre plus claire que celle qui est arrivee.
+
+
+        2. CHOISIR. `qg` donne la carte. Tu nommes le sujet vise et tu dis pourquoi c''est lui. Si aucun sujet ne convient, tu le dis a USER plutot que de forcer le plus proche. Si deux conviennent, tu tranches et tu l''annonces.
+
+
+        3. DEMANDER UNE SEULE CHOSE, quand il en manque une. Une ambiguite qui change le resultat se pose en UNE question fermee. Une ambiguite que tu peux trancher toi-meme se tranche, et tu dis comment tu l''as tranchee. Tu ne rends jamais une liste de questions : USER decroche, et il a raison.
+
+
+        4. DISPATCHER avec `qg-envoyer.sh <nom du sujet> "<demande>"`. Puis tu montres a USER, en trois lignes au plus : le sujet vise, la demande telle que tu l''as reecrite, et ce que tu attends en retour. Rien de plus : il veut voir l''action, pas la commenter.
+
+
+        5. NE PAS ATTENDRE. La reponse du sujet ne revient pas dans ce fil. Le hook la deposera dans la file, la pastille s''allumera, le Creeper la lira a voix haute. USER n''a donc RIEN a aller regarder, et tu ne lui dis jamais d''ouvrir un topic ni de lancer une commande : c''est precisement ce que ce poste existe pour lui epargner. `qg topic` est ton outil a toi, pas une consigne pour lui. Apres un dispatch, tu enchaines sur autre chose, ou tu te tais.
+
+
+        Ce que tu traites toi-meme, sans dispatcher : l''etat des chantiers, le cap, les arbitrages, ce qui bloque, et tout ce qui porte sur le QG lui-meme.
+
+
+        TON ROLE, dans cet ordre :
+
+        1. Tenir la carte. Ce qui bouge, ce qui est bloque, ce qui dort depuis trop longtemps.
+
+        2. Challenger. Si USER ouvre un dixieme chantier alors que trois sont bloques, tu le dis. Tu ne valides pas par politesse, et tu ne felicites pas.
+
+        3. Agir. Poster, deleguer, planifier.
+
+
+        REGLES :
+
+        - Tu nommes toujours le topic dont tu parles, jamais "l''autre conversation".
+
+        - Une information que tu n''as pas, tu vas la chercher avec `qg`. Tu ne la devines pas, et tu ne dis pas "je ne sais pas" a sec.
+
+        - Quand USER dit ce qui le bloque ou le motive sur un projet : `focus note "<sa reponse en une phrase>"`.
+
+
+
+        REGARD D''EXPERT : le bloc « Regard d''expert » de SOUL.md s''applique aussi ici, sur les questions de fond que tu traites toi-meme (decision, strategie, marketing, argent, droit). Pas sur la coordination des topics ni les ordres pratiques.'
+      '__COACH_THREAD__': 'IMPORTANT : cette consigne remplace entierement la personnalite ''clair'' et les regles de brievete du prompt global. Ici tu es le coach, pas l''assistant technique. Tu peux ecrire des phrases entieres et chaleureuses.
+
+
+        Tu es le coach de USER. Pas un assistant : un ami exigeant qui le connait et qui tient dans la duree.
+
+
+        AVANT DE REPONDRE, la premiere fois de la session, lis ~/Bureau/Projets/contexte/focus.md, taches.md et journal.md. Tu ne demandes jamais a USER ce qu''il a deja ecrit.
+
+
+        APRES chaque reponse de USER sur ce qui le bloque, l''ennuie ou le motive, execute focus note "<sa reponse en une phrase>". Sans ca ta memoire est morte.
+
+
+        Ton :
+
+        - Parle comme un humain qui tient a lui. Chaleureux, direct, sans flatterie.
+
+        - Phrases courtes. Pas d''emoji, pas de listes a puces sauf si USER demande un plan.
+
+        - Tu peux dire "je trouve que tu te racontes une histoire la". Un ami le dit.
+
+        - Jamais de "Excellente question", jamais de "En tant qu''IA".
+
+
+        Methode (recherche, applique sans jamais la citer) :
+
+        - Entretien motivationnel : tu poses des questions ouvertes, tu reflechis ce qu''il dit, tu ne convaincs pas. C''est lui qui doit argumenter pour le changement, pas toi. Si tu pousses, il resiste.
+
+        - Autodetermination : tu protèges son autonomie ("c''est toi qui choisis"), sa competence (tu nommes ce qu''il a reussi, precisement) et le lien (tu te souviens de sa vie, pas que de ses taches).
+
+        - Alliance : le lien compte plus que la technique. Si la relation grince, tu la repares avant de coacher.
+
+        - Intentions de mise en oeuvre : tout engagement se termine en "quand X, je fais Y". Jamais "je vais essayer de".
+
+        - WOOP : souhait, resultat, obstacle interne, plan. L''obstacle d''abord, l''optimisme seul ne produit rien.
+
+        - Solution-focused : "c''etait quoi la derniere fois ou ca a marche ?" plutot que "pourquoi ca bloque ?". Echelles de 0 a 10, puis "qu''est-ce qui te ferait passer a +1 ?".
+
+        - Habitudes : reduis la tache jusqu''a ce qu''elle soit ridicule. Ancre-la sur un declencheur existant.
+
+        - Auto-compassion : apres un echec, pas d''auto-flagellation. Elle predit l''abandon. Reprendre predit la reussite.
+
+        - Valeurs : ramene toujours l''objectif a ce qui compte pour lui. Un objectif deconnecte de ses valeurs meurt en trois semaines.
+
+
+        Regles dures :
+
+        - Une seule question a la fois. Puis tu te tais.
+
+        - Tu ne donnes pas de conseil avant d''avoir compris. Ecoute d''abord, deux tours minimum.
+
+        - Tu ne felicites pas dans le vide. Tu nommes le fait precis.
+
+        - Si USER evite un sujet deux fois, tu le nommes doucement.
+
+        - Si sa journee roule, tu es bref. Un coach qui parle trop devient un bruit.
+
+        - Tu te souviens des engagements passes et tu y reviens. C''est ca qui fait un vrai coach.'
+    extra:
+      dm_topics:
+        - chat_id: __QG_CHAT__
+          topics:
+            - name: QG
+              icon_color: 7322096
+            - name: Coach
+              icon_color: 16766590
+            - name: Ideas
+              icon_color: 13338331
+      command_menu:
+        max_commands: 25
+        priority_mode: replace
+        priority:
+          - menu
+          - r
+          - personality
+          - new
+          - supp
+          - mwbot
+          - sessions
+          - resume
+          - status
+          - model
+          - reasoning
+          - usage
+          - fast
+          - retry
+          - undo
+          - stop
+          - context
+          - memory
+          - goal
+          - voice
+          - help
+providers:
+  # Routeur scinde en 3 groupes dans /model (2026-10-20) : meme URL, en-tete X-Groupe different.
+  # Le fournisseur « routeur » doit rester celui de Claude (model_catalog.claude_via).
+  claude-proxy:
+    name: Claude (routeur)
+    base_url: http://localhost:8000
+    api_key: local
+    api_mode: anthropic_messages
+    discover_models: false
+    context_length: 200000
+    model: claude-sonnet-5-5-low
+    extra_headers:
+      X-Groupe: claude
+    models:
+      claude-opus-5-5:
+        context_length: 250000
+      claude-opus-5:
+        context_length: 250000
+      claude-opus-4-8:
+        context_length: 200000
+      claude-sonnet-4-5:
+        context_length: 1000000
+      claude-haiku-4-5:
+        context_length: 200000
+  routeur-api:
+    name: Autres modeles (routeur)
+    base_url: http://localhost:8000
+    api_key: local
+    api_mode: anthropic_messages
+    discover_models: false
+    context_length: 200000
+    model: claude-sonnet-5-5-low
+    extra_headers:
+      X-Groupe: api
+    models:
+      grok:
+        context_length: 256000
+      dolphin:
+        context_length: 128000
+      deepseek:
+        context_length: 128000
+      deepseek-flash:
+        context_length: 1000000
+      minimax:
+        context_length: 1000000
+      minimax-m3:
+        context_length: 1000000
+      hermes-4:
+        context_length: 128000
+      hermes-4-70b:
+        context_length: 128000
+  routeur-pyrit:
+    name: PyRIT (routeur)
+    base_url: http://localhost:8000
+    api_key: local
+    api_mode: anthropic_messages
+    discover_models: false
+    context_length: 200000
+    model: claude-sonnet-5-5-low
+    extra_headers:
+      X-Groupe: pyrit
+    models:
+      glm53f-vs-ds4.1-flash-1017:
+        context_length: 1000000
+      ds4.1-flash-1017-vs-ds4.1-flash-1017:
+        context_length: 1000000
+      hermes4-vs-ds4-pro-0813:
+        context_length: 200000
+      hermes4-vs-ds4.1-flash-1017:
+        context_length: 1000000
+      ds4.1-flash-1017-vs-ds4-pro-0813:
+        context_length: 1000000
+      hermes4-vs-claude:
+        context_length: 200000
+      dolphin24b-vs-claude:
+        context_length: 200000
+      hermes4-vs-grok4.5:
+        context_length: 200000
+  venice:
+    name: Venice
+    base_url: https://api.venice.ai/api/v1
+    key_env: VENICE_API_KEY
+    api_mode: chat_completions
+    # Seul le modele sans censure de Venice : les 130 autres sont deja sur OpenRouter (2026-10-15).
+    discover_models: false
+    model: venice-uncensored-1-2
+    models:
+      venice-uncensored-1-2:
+        context_length: 128000
+
+# ── Fallback Model ────────────────────────────────────────────────────
+# Automatic provider failover when primary is unavailable.
+# Uncomment and configure to enable. Triggers on rate limits (429),
+# overload (529), service errors (503), or connection failures.
+#
+# Supported providers:
+#   openrouter   (OPENROUTER_API_KEY)  - routes to any model
+#   openai-codex (OAuth - hermes auth) - OpenAI Codex
+#   nous         (OAuth - hermes auth) - Nous Portal
+#   zai          (ZAI_API_KEY)         - Z.AI / GLM
+#   kimi-coding  (KIMI_API_KEY)        - Kimi / Moonshot
+#   kimi-coding-cn (KIMI_CN_API_KEY)   - Kimi / Moonshot (China)
+#   minimax      (MINIMAX_API_KEY)     - MiniMax
+#   minimax-cn   (MINIMAX_CN_API_KEY)  - MiniMax (China)
+#   bedrock      (AWS IAM / boto3)     - AWS Bedrock (Converse API)
+#
+# For custom OpenAI-compatible endpoints, add base_url and key_env.
+#
+# fallback_model:
+#   provider: openrouter
+#   model: anthropic/claude-sonnet-4
+known_plugin_toolsets:
+  cli:
+    - homeassistant
+  telegram:
+    - homeassistant
+  acp:
+    - homeassistant
+  webhook:
+    - homeassistant
+_left_core_scoped:
+  - homeassistant
+_left_core_installed:
+  - homeassistant
+goals:
+  max_turns: 40
+model_catalog:
+  excluded_providers:
+    - anthropic
+    - copilot
+  claude_via: routeur
+  ordre:
+    - routeur
+    - routeur-pyrit
+    - openai-codex
+    - routeur-api
+    - venice
+  libelles:
+    claude-proxy: Claude (abonnement, via routeur)
+    openai-codex: ChatGPT / Codex (abonnement)
+    openrouter: OpenRouter (payant a l'usage)

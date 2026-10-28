@@ -1,0 +1,8 @@
+[
+  {"query": "Il faudrait peut-être chercher des skills pour faire ça", "should_trigger": true},
+  {"query": "trouver des skills qui existent sur ce sujet", "should_trigger": true},
+  {"query": "regarde sur skills.sh s'il y a un skill pour les PDF", "should_trigger": true},
+  {"query": "crée une skill pour envoyer les relances", "should_trigger": false},
+  {"query": "mets à jour toutes les skills", "should_trigger": false},
+  {"query": "cherche un fournisseur de bouteilles sur 1688", "should_trigger": false}
+]

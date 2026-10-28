@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Le triangle de lecture. Un vecteur plutot que le caractere U+25B6 :
+     selon la police du systeme celui-ci part en emoji et change de couleur. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="16dp" android:height="16dp"
+        android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFF" android:pathData="M8,5v14l11,-7z" />
+</vector>

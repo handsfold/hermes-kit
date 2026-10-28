@@ -1,0 +1,46 @@
+#!/bin/bash
+# Qui tient quel telephone, et comment rendre ou attendre la main (2026-10-06).
+# La regle elle-meme vit dans adb-main.sh, appelee par adb-garde.
+#
+#   telephone etat              qui tient chaque appareil, qui attend
+#   telephone rendre <app>      rend la main (fin de pilotage)
+#   telephone rendre <app> --force   libere un bail qui n'est pas le sien
+#   telephone attendre <app> [s]     bloque jusqu'a ce que la main soit libre
+#   telephone journal [n]       les n dernieres prises, pauses et refus
+PRIORITE=${ADB_PRIORITE:-/tmp/adb-priorite}
+. "$(dirname "$(readlink -f "$0")")/adb-main.sh"
+mkdir -p "$PRIORITE"
+
+etat() {
+  local b app vu=0 t
+  for b in "$PRIORITE"/bail-*; do
+    case "$b" in *.lock) continue ;; esac
+    [ -e "$b" ] || continue
+    app=${b##*/bail-}; vu=1
+    if main_lire_bail "$b"; then
+      echo "$app : tenu par $B_LIBELLE ($B_CLASSE), derniere action il y a ${B_AGE} s"
+    else
+      echo "$app : libre (dernier : ${B_LIBELLE:-?}, il y a ${B_AGE:-?} s)"
+    fi
+    for t in $(ls "$PRIORITE/file-$app" 2>/dev/null | sort); do
+      echo "  en attente : $(cut -f2 "$PRIORITE/file-$app/$t")"
+    done
+  done
+  [ "$vu" = 0 ] && echo "Aucun telephone tenu."
+}
+
+case "${1:-etat}" in
+  etat) etat ;;
+  rendre) [ -n "$2" ] || { echo "usage : telephone rendre <appareil> [--force]" >&2; exit 2; }
+    main_rendre "$2" "$3" ;;
+  attendre) [ -n "$2" ] || { echo "usage : telephone attendre <appareil> [secondes]" >&2; exit 2; }
+    main_identite; fin=$(( $(date +%s) + ${3:-900} ))
+    while main_lire_bail "$PRIORITE/bail-$2" && [ "$B_PROPRIO" != "$MAIN_PROPRIO" ] \
+          && { [ "$MAIN_CLASSE" = lot ] || [ "$B_CLASSE" = pilote ]; }; do
+      [ "$(date +%s)" -ge "$fin" ] && { echo "$2 toujours tenu par $B_LIBELLE." >&2; exit 75; }
+      sleep 2
+    done
+    echo "$2 libre." ;;
+  journal) tail -n "${2:-20}" "$PRIORITE/journal.log" 2>/dev/null ;;
+  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

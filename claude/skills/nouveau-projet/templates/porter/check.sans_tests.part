@@ -1,0 +1,11 @@
+  # CE PROJET N'A AUCUN TEST. C'est écrit ici plutôt que tu et il est compté
+  # comme un avertissement, pas comme un vert : un filet vide ne protège rien,
+  # et une ligne muette laisserait croire le contraire (principe 2 du socle,
+  # ne jamais décrire une protection qui n'existe pas).
+  # Le jour où tests/ existe, remplacer ce bloc par l'appel à pytest.
+  aucun_test() {
+    echo "  Aucun test dans ce dépôt : le lint et la syntaxe sont la seule protection."
+    echo "  Remède : un premier test sur le chemin qui casse le plus souvent."
+    return 1
+  }
+  avertir "Tests" aucun_test

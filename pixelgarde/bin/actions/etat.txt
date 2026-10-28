@@ -1,0 +1,12 @@
+# Les deux libelles du bouton d'etat, en tete du menu de la pastille.
+# Ligne 1 : quand le pilotage tourne. Ligne 2 : quand il est arrete.
+#
+# Ce fichier existe parce que le CLI `pixel` et le garde construisaient chacun
+# leur menu, avec leurs propres libelles. Ils ont diverge : la pastille
+# affichait "ARRETER" pose par le CLI, alors que le garde attendait un autre
+# libelle. Une seule source, plus de divergence.
+#
+# Pas d'apostrophe : le menu voyage dans un `adb shell` entre guillemets
+# simples, elle refermerait la chaine au milieu du libelle.
+stop:Mettre en pause
+go:Reprendre

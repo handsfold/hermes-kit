@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La carte repliee de l'avis de rapport.
+     POURQUOI UNE VUE SUR MESURE : verifie en capture le 2026-08-30, un
+     addAction n'apparait QUE si la carte est depliee. Repliee, USER voyait un
+     titre tronque et rien pour lancer la lecture. Seule une RemoteViews donne
+     un bouton visible d'emblee.
+     Hauteur tenue sous 48dp : au-dela, Android rogne la vue repliee. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/avis_titre"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/avis_texte"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/avis_lire"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/pilule"
+        android:drawableStart="@drawable/jouer"
+        android:drawablePadding="6dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp"
+        android:text="@string/avis_lire"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>

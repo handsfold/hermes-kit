@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bulle_menu_arreter">STOP</string>
+    <string name="bulle_menu_masquer">Hide</string>
+    <string name="bulle_etat_muet">hote-1 not answering, tap pending</string>
+    <string name="bulle_etat_pause">Control paused</string>
+    <string name="bulle_etat_attente">You\'re in control</string>
+    <string name="bulle_etat_actif">Agent active</string>
+    <string name="bulle_etat_lecture_pause">Reading paused: tap to resume</string>
+    <string name="bulle_etat_lecture">Reading: tap to pause</string>
+    <string name="bulle_etat_ecoute">Listening</string>
+    <string name="bulle_etat_reflechit">HQ is thinking</string>
+    <string name="bulle_etat_pret">Your turn: hold the bubble to talk</string>
+    <string name="bulle_etat_capture">Screen recording</string>
+    <string name="bulle_etat_veille">Agent idle</string>
+    <string name="bulle_titre_vitesse">Speed</string>
+    <string name="bulle_titre_cerveau">Brain</string>
+    <string name="bulle_titre_bleu">Blue filter</string>
+    <string name="bulle_titre_reglages">Settings</string>
+    <string name="bulle_tuile_annuler">Cancel</string>
+    <string name="bulle_tuile_precedent">Previous</string>
+    <string name="bulle_tuile_suivant">Next</string>
+    <string name="bulle_tuile_arreter">Stop</string>
+    <string name="bulle_tuile_reprendre">Resume</string>
+    <string name="bulle_tuile_pause">Pause</string>
+    <string name="bulle_tuile_envoyer">Send</string>
+    <string name="bulle_tuile_parler">Talk</string>
+    <string name="bulle_pct">%1$d%%</string>
+    <string name="bulle_choix_detail">Details</string>
+    <string name="bulle_choix_oui">Yes</string>
+    <string name="bulle_choix_non">No</string>
+    <string name="bulle_onglet_apps">Apps</string>
+</resources>

@@ -1,0 +1,38 @@
+From 43904c37c37150c7da4f2d67069f4eff8d50eecd Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] /stop : le steer restant est jete au lieu de relancer l'agent
+
+Avec le proxy local un message envoye pendant le tour n'est jamais injecte en
+cours de route : il restait en steer et relancait l'agent 2 s apres /stop
+(topic 5413, 2026-10-03).
+
+Retouche: R12
+---
+ gateway/run_turn.py | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/gateway/run_turn.py b/gateway/run_turn.py
+index 6185359263..bc6a9bf950 100644
+--- a/gateway/run_turn.py
++++ b/gateway/run_turn.py
+@@ -3460,7 +3460,18 @@ class GatewayTurnMixin:
+                     logger.debug("Processing queued message after agent completion: '%s...'", pending[:40])
+ 
+         # Leftover /steer (arrived after the last tool batch): deliver as the next user turn.
+-        if result and not pending and not pending_event and result.get("pending_steer"):
++        # Patch local USER : apres un /stop, le steer restant est jete. Avec le proxy Claude, un
++        # message envoye pendant le tour n'est jamais injecte en cours de route : il restait en
++        # steer et relancait l'agent 2 s apres le /stop (topic 5413, 2026-10-03 17:35).
++        _stopped = bool(
++            result and result.get("interrupted")
++            and _is_control_interrupt_message(result.get("interrupt_message"))
++        )
++        if _stopped and result.get("pending_steer"):
++            logger.info(
++                "Discarding leftover steer for session %s after /stop", session_key or "?",
++            )
++        if result and not _stopped and not pending and not pending_event and result.get("pending_steer"):
+             pending = result.get("pending_steer")
+             logger.debug("Delivering leftover /steer as next turn: '%s...'", pending[:40])
+ 

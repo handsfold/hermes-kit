@@ -1,0 +1,5 @@
+name: mode-objectif
+version: 1.0.0
+description: "Goal mode button in /menu (bilingual, English by default): turns the tool relay (topics-relais.json) on or off for the current topic."
+author: hermes-kit
+kind: standalone

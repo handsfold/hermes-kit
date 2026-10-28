@@ -1,0 +1,57 @@
+# ── Chaîne de dépendances npm ────────────────────────────────────────────────
+# Un `npm install <paquet>` exécute les scripts preinstall/install/postinstall
+# de TOUTE la fermeture transitive, sans que le paquet soit jamais importé dans
+# le code. C'est le vecteur des compromissions d'août 2026 (chalk, debug, puis
+# la vague via les dépendances profondes d'ESLint) : voler des clés AWS, des
+# jetons GitHub, des portefeuilles crypto. Sur un poste qui porte les clés de
+# plusieurs zones Cloudflare et de la prod, ce n'est pas un risque théorique.
+#
+# Ce projet est resté sur npm, qui ne sait PAS imposer un délai avant d'accepter
+# une version fraîche. On bloque donc ce qui fait ENTRER du code neuf, et on
+# laisse passer ce qui RESTAURE depuis le lock déjà en place (npm ci, npm
+# install sans argument) : bloquer aussi celui-là ferait un garde-fou qu'on
+# contourne dix fois par jour, donc plus de garde-fou du tout.
+_AJOUT = {"install", "i", "add", "update", "up", "upgrade"}
+for _seg in re.split(r"&&|\|\||;|\n|\|", cmd):
+    _mots = _seg.strip().split()
+    if _mots and _mots[0] == "sudo":
+        _mots = _mots[1:]
+    if len(_mots) < 2:
+        continue
+    _outil, _verbe, _reste = _mots[0], _mots[1], _mots[2:]
+    # Un paquet, c'est un argument qui n'est ni un drapeau ni la valeur d'un
+    # drapeau. Sans ce tri, « npm i -D vitest » passerait pour une restauration.
+    _paquets = [a for a in _reste if not a.startswith("-")]
+
+    if _outil == "npm" and _verbe in _AJOUT and _paquets:
+        deny(
+            f"« {_seg.strip()[:60]} » ajoute une dépendance neuve : npm l'installe "
+            "sans délai de publication et exécute ses scripts d'installation, "
+            "ainsi que ceux de toute sa fermeture transitive.\n"
+            f"  Avant : npm view {_paquets[0]} time --json  -> refuser si la version a moins de 7 jours.\n"
+            f"  Puis  : npm install --ignore-scripts {' '.join(_reste)}\n"
+            "  Enfin : git diff package-lock.json  -> un paquet sans rapport avec "
+            "l'ajout est un signal, pas un détail.\n"
+            "  Restaurer l'existant n'est PAS concerné : npm ci passe."
+        )
+    if _outil in ("yarn", "bun") and _verbe in _AJOUT:
+        deny(
+            f"« {_seg.strip()[:60]} » : ce projet est en npm, son lock est "
+            "package-lock.json. Un second gestionnaire produit un second arbre "
+            "de dépendances, et le déploiement n'en installe qu'un.\n"
+            "  Remède : npm ci pour restaurer, npm install --ignore-scripts <paquet> pour ajouter."
+        )
+
+# npx sans --no-install télécharge puis exécute un paquet arbitraire : même
+# risque qu'une installation, en plus discret car il ne laisse aucune trace
+# dans package.json ni dans le lock.
+for _seg in re.split(r"&&|\|\||;|\n|\|", cmd):
+    _seg = _seg.strip()
+    if re.match(r"^(?:sudo\s+)?npx\b", _seg) and "--no-install" not in _seg:
+        deny(
+            f"« {_seg[:60]} » : npx télécharge et exécute un paquet arbitraire, "
+            "hors du fichier lock et sans délai de publication.\n"
+            "  Remède : npx --no-install <outil> si l'outil est déjà une dépendance "
+            "du projet ; sinon l'ajouter d'abord en dépendance de développement."
+        )
+

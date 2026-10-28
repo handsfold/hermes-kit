@@ -1,0 +1,89 @@
+From 5632f4f5abd7a5eb277cf3c924c5a28dd1b4c1e2 Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Securite : arreter ou relancer l'unite du gateway par
+ systemctl est bloque (hardline)
+
+L'agent tourne dans le cgroup du gateway : relancer sa propre unite bloque
+(l'arret attend le drain, le drain attend l'agent). Motif HARDLINE car
+approvals.mode=off rend inerte le niveau DANGEROUS. 'reload' n'est pas bloque et
+les messages y renvoient. Test de la liste dure complete.
+
+Retouche: R05
+---
+ tests/tools/test_hardline_blocklist.py | 20 ++++++++++++++++++++
+ tools/approval_detection.py            | 16 ++++++++++++++--
+ 2 files changed, 34 insertions(+), 2 deletions(-)
+
+diff --git a/tests/tools/test_hardline_blocklist.py b/tests/tools/test_hardline_blocklist.py
+index 07d1edb45c..8805215875 100644
+--- a/tests/tools/test_hardline_blocklist.py
++++ b/tests/tools/test_hardline_blocklist.py
+@@ -115,6 +115,17 @@ _HARDLINE_BLOCK = [
+     "exec shutdown",
+     "nohup reboot",
+     "setsid poweroff",
++    # Gateway self-termination via systemctl: restarting or stopping the
++    # unit the agent itself runs under deadlocks systemctl against the
++    # gateway's own drain, then kills the agent mid-work.
++    "systemctl --user restart hermes-gateway",
++    "systemctl --user restart hermes-gateway.service",
++    "systemctl restart --user hermes-gateway",
++    "systemctl --user stop hermes-gateway",
++    "systemctl --user try-restart hermes-gateway.service",
++    "systemctl --user kill hermes-gateway",
++    "cd /tmp && systemctl --user restart hermes-gateway",
++    "sudo systemctl --user restart hermes-gateway",
+     # Bare subshell `(cmd)` and brace-group `{ cmd; }` openers put the trigger
+     # at a real command position, so they must hit the floor just like `$(…)`.
+     # These slipped through before the quote-aware command-start tokenizer
+@@ -191,6 +202,15 @@ _HARDLINE_ALLOW = [
+     "systemctl restart nginx",
+     "systemctl stop nginx",
+     "systemctl start nginx",
++    # Gateway self-termination: reload is the graceful path (ExecReload
++    # sends SIGUSR1), so it must never be blocked. Other units restart freely.
++    "systemctl --user reload hermes-gateway",
++    "systemctl --user reload hermes-gateway.service",
++    "systemctl --user status hermes-gateway",
++    "systemctl --user is-active hermes-gateway",
++    "journalctl --user -u hermes-gateway -n 50",
++    "systemctl --user restart claude-proxy",
++    "systemctl --user daemon-reload",
+     # targeted kill
+     "kill -9 12345",
+     "kill -HUP 1234",
+diff --git a/tools/approval_detection.py b/tools/approval_detection.py
+index 617fb8de88..f94208106b 100644
+--- a/tools/approval_detection.py
++++ b/tools/approval_detection.py
+@@ -118,6 +118,18 @@ HARDLINE_PATTERNS = [
+     (_CMDPOS + r'init\s+[06]\b', "init 0/6 (shutdown/reboot)"),
+     (_CMDPOS + r'systemctl\s+(poweroff|reboot|halt|kexec)\b', "systemctl poweroff/reboot"),
+     (_CMDPOS + r'telinit\s+[06]\b', "telinit 0/6 (shutdown/reboot)"),
++    # Self-termination via systemctl: the agent runs inside the gateway's
++    # cgroup, so a restart of its own unit deadlocks. systemctl waits for the
++    # unit's stop job, the gateway's drain waits for this very agent to finish,
++    # and neither can. After the drain timeout the agent is killed mid-work and
++    # its reply is lost.
++    # Hardline (not DANGEROUS) because approvals.mode=off makes the DANGEROUS
++    # tier inert. `reload` is deliberately NOT matched: it maps to
++    # ExecReload=kill -USR1, which returns immediately and triggers the
++    # graceful restart path (request_restart -> drain -> exit 75).
++    (_CMDPOS + r'systemctl\b(?=[^\n;&|]*\bhermes-gateway\b)[^\n;&|]*\b(restart|stop|try-restart|kill)\b',
++     "systemctl restart/stop of the agent's own gateway (self-termination deadlock). "
++     "Use 'systemctl --user reload hermes-gateway' instead, which restarts it gracefully"),
+ ]
+ 
+ # Pre-compiled at module load so the hot-path matcher never pays the cold re.compile fan-out
+@@ -337,8 +349,8 @@ DANGEROUS_PATTERNS = [
+     (r'\bdocker(?:-compose|\s+compose)\s+(?:-{1,2}\S+(?:[=\s]\S+)?\s+)*(restart|stop|kill|down)\b', "docker compose restart/stop/kill/down (container lifecycle)"),
+     (r'\bdocker\s+(?:-{1,2}\S+(?:[=\s]\S+)?\s+)*(restart|stop|kill)\b', "docker restart/stop/kill (container lifecycle)"),
+     # Gateway protection: never start gateway outside systemd management
+-    (r'gateway\s+run\b.*(&\s*$|&\s*;|\bdisown\b|\bsetsid\b)', "start gateway outside systemd (use 'systemctl --user restart hermes-gateway')"),
+-    (r'\bnohup\b.*gateway\s+run\b', "start gateway outside systemd (use 'systemctl --user restart hermes-gateway')"),
++    (r'gateway\s+run\b.*(&\s*$|&\s*;|\bdisown\b|\bsetsid\b)', "start gateway outside systemd (use 'systemctl --user reload hermes-gateway')"),
++    (r'\bnohup\b.*gateway\s+run\b', "start gateway outside systemd (use 'systemctl --user reload hermes-gateway')"),
+     # Self-termination protection: prevent agent from killing its own process
+     (r'\b(pkill|killall)\b.*\b(hermes|gateway|cli\.py)\b', "kill hermes/gateway process (self-termination)"),
+     # Self-termination via kill + $(pgrep/pidof): the substitution is opaque to the name-based

@@ -1,0 +1,439 @@
+From 50d31216fee15ca9065118aacb539fdd695dbf2d Mon Sep 17 00:00:00 2001
+From: hermes-kit <noreply@hermes-kit.invalid>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: [PATCH] Voix : reponse decoupee en bulles TTS, pause anti-flood et
+ reprises sur coupure
+
+Le texte est decoupe pour la synthese (gateway/voice_delivery.py), livre bulle
+par bulle avec 1,5 s entre deux (Telegram bride a ~1 message/s par salon), sans
+reply_to pour ne pas mentionner USER a chaque bulle. send_voice Telegram rejoue
+sur flood control, puis 2 reprises (3 s, 8 s) sur coupure reseau (2026-10-04),
+et ne deverse plus le chemin local du .ogg dans le fil. Meme decoupage pour les
+livraisons cron (scheduler_delivery).
+
+Retouche: R07
+---
+ cron/scheduler_delivery.py            |  58 ++++++-
+ gateway/run_voice.py                  |  12 +-
+ gateway/voice_delivery.py             | 225 ++++++++++++++++++++++++++
+ plugins/platforms/telegram/adapter.py |  55 ++++++-
+ 4 files changed, 344 insertions(+), 6 deletions(-)
+ create mode 100644 gateway/voice_delivery.py
+
+diff --git a/cron/scheduler_delivery.py b/cron/scheduler_delivery.py
+index 90c02b331c..e7be279cb5 100644
+--- a/cron/scheduler_delivery.py
++++ b/cron/scheduler_delivery.py
+@@ -12,6 +12,7 @@ import asyncio
+ import concurrent.futures
+ import contextlib
+ import contextvars
++import json
+ import logging
+ import os
+ import shutil
+@@ -1676,6 +1677,48 @@ def _unresolved_delivery_outcome(job: dict, for_failure: bool) -> Optional[str]:
+     return msg
+ 
+ 
++_VOICE_MODE_FILENAME = "gateway_voice_mode.json"
++_VOICE_MODES = {"off", "voice_only", "all"}
++
++
++def _voice_mode_for(platform_name: str, chat_id: str) -> str:
++    """Persisted voice mode for a chat, as written by the gateway's ``/voice`` command.
++
++    The scheduler may run out-of-process, so ``gateway_voice_mode.json`` is re-read on every
++    delivery rather than cached. Keys are ``<platform>:<chat_id>``, or ``<profile>:<platform>:
++    <chat_id>`` under multiplexing (see ``GatewayVoiceMixin._voice_key``).
++    """
++    try:
++        raw = (_sched._get_hermes_home() / _VOICE_MODE_FILENAME).read_text(encoding="utf-8")
++        data = json.loads(raw)
++    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
++        return "off"
++    if not isinstance(data, dict):
++        return "off"
++    suffix = f"{str(platform_name).lower()}:{chat_id}"
++    mode = data.get(suffix)
++    if mode is None:  # multiplexed key carries a profile prefix
++        mode = next((v for k, v in data.items() if str(k).endswith(f":{suffix}")), None)
++    return mode if mode in _VOICE_MODES else "off"
++
++
++def _voice_chunks_for_target(platform_name: str, chat_id: str, text: str, job: dict) -> list:
++    """Render *text* to voice files when the target chat has voice mode "all".
++
++    Cron output is delivered outside the normal message pipeline, so without this the user got
++    text only for scheduled jobs even with voice mode on. Returns a (possibly empty) list of
++    audio paths the caller must clean up.
++    """
++    if not text or _voice_mode_for(platform_name, chat_id) != "all":
++        return []
++    try:
++        from gateway.voice_delivery import synthesize_voice_chunks
++        return synthesize_voice_chunks(text, platform=platform_name, prefix="cron_voice")
++    except Exception as e:
++        logger.warning("Job '%s': cron voice synthesis failed: %s", job.get("id", "?"), e)
++        return []
++
++
+ def _deliver_result(
+     job: dict, content: str, adapters=None, loop=None, *, for_failure: bool = False
+ ) -> Optional[str]:
+@@ -1768,6 +1811,7 @@ def _deliver_result(
+         return msg
+ 
+     delivery_errors = []
++    generated_voice_files: list = []
+     for target in targets:
+         # Bot Chat owns admission; never concurrently resume a live owner's transcript.
+         if target["platform"] == BOT_CHAT_PLATFORM:
+@@ -1787,15 +1831,25 @@ def _deliver_result(
+             mirror_enabled=mirror_enabled, mirror_text=mirror_text, delivery_errors=delivery_errors)
+         if t is None:
+             continue
++        # Voice mode "all" on this chat: cron output bypasses the normal message pipeline, so
++        # synthesize the audio here too. Long output yields several chunks, each sent as its own
++        # voice message. The clean, unwrapped text is spoken: the header/footer is noise aloud.
++        voice_files = _voice_chunks_for_target(t.platform_name, t.chat_id, t.mirror_text, job)
++        generated_voice_files.extend(voice_files)
++        target_media = list(media_files) + [(path, True) for path in voice_files]
+         target_errors: list = []
+         delivered = t.live_adapter_ready and _deliver_via_live_adapter(
+-            t, cleaned_delivery_content, media_files,
++            t, cleaned_delivery_content, target_media,
+             target_errors=target_errors, delivery_errors=delivery_errors,
+             unverified_targets=unverified_targets,
+         )
+         if not delivered:
+             _deliver_standalone(
+-                t, cleaned_delivery_content, media_files, target_errors, delivery_errors)
++                t, cleaned_delivery_content, target_media, target_errors, delivery_errors)
++
++    if generated_voice_files:
++        from gateway.voice_delivery import cleanup_voice_chunks
++        cleanup_voice_chunks(generated_voice_files)
+ 
+     # Filter-time drops apply to every target; report them once.
+     delivery_errors.extend(policy_drop_errors)
+diff --git a/gateway/run_voice.py b/gateway/run_voice.py
+index a5b993243a..d5e7b3ff79 100644
+--- a/gateway/run_voice.py
++++ b/gateway/run_voice.py
+@@ -367,6 +367,14 @@ class GatewayVoiceMixin:
+         # adapters (Telegram "important" mode) deliver it. Clone: shared w/ typing-indicator state.
+         thread_meta = dict(self._thread_metadata_for_source(event.source, reply_anchor) or {})
+         thread_meta["notify"] = True
+-        for path in audio_paths:
+-            await send_voice(chat_id=event.source.chat_id, audio_path=path, reply_to=reply_anchor,
++        for _index, path in enumerate(audio_paths):
++            # Pause entre deux bulles : Telegram bride a environ 1 message par
++            # seconde et par salon. Sans ce souffle, une reponse decoupee en
++            # plusieurs morceaux declenche le flood control.
++            if _index > 0:
++                await asyncio.sleep(1.5)
++            # Pas de reply_to : citer le message de USER le fait mentionner sur
++            # CHAQUE bulle vocale. L'audio arrive juste apres son message, la
++            # citation n'ajoute que du bruit.
++            await send_voice(chat_id=event.source.chat_id, audio_path=path,
+                              metadata=thread_meta)
+diff --git a/gateway/voice_delivery.py b/gateway/voice_delivery.py
+new file mode 100644
+index 0000000000..a4ac610107
+--- /dev/null
++++ b/gateway/voice_delivery.py
+@@ -0,0 +1,225 @@
++"""Shared helpers to turn a long text reply into one or more TTS voice files.
++
++Two problems this module solves:
++
++1. ``text_to_speech_tool`` truncates anything above the provider's
++   ``max_text_length`` (edge-tts: 5000 chars).  A long agent reply therefore
++   produced a single audio covering only its first part.  ``split_text_for_tts``
++   cuts the text on paragraph / sentence boundaries so every part is spoken.
++
++2. Cron job deliveries never went through the gateway's voice path at all.
++   ``synthesize_voice_chunks`` is provider- and platform-agnostic so both the
++   live reply path (``gateway/run.py``) and the cron delivery path
++   (``cron/scheduler.py``) can use it.
++"""
++
++from __future__ import annotations
++
++import logging
++import os
++import re
++import tempfile
++import uuid as _uuid
++from typing import List, Optional
++
++logger = logging.getLogger(__name__)
++
++# Hard ceiling on how many voice messages a single reply may produce, so a
++# runaway 100k-char answer can't flood the chat with 30 audio bubbles.
++MAX_VOICE_CHUNKS = 12
++
++# Safety margin under the provider cap: markdown stripping can slightly grow
++# the text (e.g. link expansion), and providers count characters differently.
++_CHUNK_SAFETY_RATIO = 0.95
++
++_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…:;])\s+")
++
++
++def resolve_tts_chunk_size(default: int = 4000) -> int:
++    """Return the safe per-request character budget for the active TTS provider."""
++    try:
++        from tools.tts_tool import (
++            _get_provider,
++            _load_tts_config,
++            _resolve_max_text_length,
++        )
++
++        tts_config = _load_tts_config()
++        provider = _get_provider(tts_config)
++        max_len = int(_resolve_max_text_length(provider, tts_config))
++    except Exception as exc:  # pragma: no cover - defensive
++        logger.debug("Could not resolve TTS max length (%s), using %d", exc, default)
++        return default
++    if max_len <= 0:
++        return default
++    return max(500, int(max_len * _CHUNK_SAFETY_RATIO))
++
++
++def _hard_split(text: str, max_len: int) -> List[str]:
++    """Last-resort splitter for a single run of text with no usable boundary."""
++    out: List[str] = []
++    remaining = text
++    while len(remaining) > max_len:
++        window = remaining[:max_len]
++        cut = window.rfind(" ")
++        if cut < max_len // 2:
++            cut = max_len
++        out.append(remaining[:cut].strip())
++        remaining = remaining[cut:].lstrip()
++    if remaining.strip():
++        out.append(remaining.strip())
++    return out
++
++
++def split_text_for_tts(text: str, max_len: int) -> List[str]:
++    """Split *text* into speakable chunks of at most *max_len* characters.
++
++    Boundaries are preferred in this order: blank line, sentence end, word.
++    Returns ``[]`` for empty input.
++    """
++    text = (text or "").strip()
++    if not text:
++        return []
++    if len(text) <= max_len:
++        return [text]
++
++    # Break into the smallest units we are willing to keep whole.
++    units: List[str] = []
++    for para in re.split(r"\n\s*\n", text):
++        para = para.strip()
++        if not para:
++            continue
++        if len(para) <= max_len:
++            units.append(para)
++            continue
++        for sentence in _SENTENCE_SPLIT_RE.split(para):
++            sentence = sentence.strip()
++            if not sentence:
++                continue
++            if len(sentence) <= max_len:
++                units.append(sentence)
++            else:
++                units.extend(_hard_split(sentence, max_len))
++
++    # Greedily repack units into chunks.
++    chunks: List[str] = []
++    current = ""
++    for unit in units:
++        candidate = f"{current}\n\n{unit}" if current else unit
++        if len(candidate) <= max_len:
++            current = candidate
++        else:
++            if current:
++                chunks.append(current)
++            current = unit
++    if current:
++        chunks.append(current)
++    return chunks
++
++
++def synthesize_voice_chunks(
++    text: str,
++    platform: Optional[str] = None,
++    max_chunks: int = MAX_VOICE_CHUNKS,
++    prefix: str = "tts_reply",
++) -> List[str]:
++    """Render *text* to a list of audio file paths (one per chunk).
++
++    *platform* (e.g. ``"telegram"``) is published as the session platform for
++    the duration of the call so ``text_to_speech_tool`` picks the right
++    container format (Opus for Telegram voice bubbles).
++
++    Never raises: on failure it returns whatever chunks were produced so far.
++    The caller owns the returned files and must unlink them.
++    """
++    import json
++
++    from tools.tts_text_normalize import _strip_markdown_for_tts
++    from tools.tts_tool import text_to_speech_tool
++
++    tts_text = _strip_markdown_for_tts(text or "")
++    if not tts_text or not tts_text.strip():
++        return []
++
++    chunk_size = resolve_tts_chunk_size()
++    chunks = split_text_for_tts(tts_text, chunk_size)
++    if not chunks:
++        return []
++
++    if len(chunks) > max_chunks:
++        logger.warning(
++            "TTS reply needs %d chunks, capping at %d (%d chars dropped)",
++            len(chunks), max_chunks,
++            sum(len(c) for c in chunks[max_chunks:]),
++        )
++        chunks = chunks[:max_chunks]
++
++    token = None
++    if platform:
++        try:
++            from gateway.session_context import _SESSION_PLATFORM
++
++            token = _SESSION_PLATFORM.set(str(platform).lower())
++        except Exception:  # pragma: no cover - defensive
++            token = None
++
++    out_dir = os.path.join(tempfile.gettempdir(), "hermes_voice")
++    os.makedirs(out_dir, exist_ok=True)
++    paths: List[str] = []
++    try:
++        for index, chunk in enumerate(chunks, start=1):
++            # .mp3 extension so edge-tts' conversion to opus works correctly;
++            # the tool returns the real path, which may end in .ogg.
++            request_path = os.path.join(
++                out_dir, f"{prefix}_{_uuid.uuid4().hex[:12]}_{index}.mp3"
++            )
++            # edge-tts occasionally times out on a healthy request; one retry
++            # keeps a transient hiccup from silently dropping a whole chunk
++            # (and every chunk after it).
++            actual = None
++            for attempt in (1, 2):
++                try:
++                    result = json.loads(
++                        text_to_speech_tool(text=chunk, output_path=request_path)
++                    )
++                except Exception as exc:
++                    logger.warning(
++                        "TTS chunk %d/%d attempt %d failed: %s",
++                        index, len(chunks), attempt, exc,
++                    )
++                    continue
++                candidate = result.get("file_path", request_path)
++                if result.get("success") and os.path.isfile(candidate):
++                    actual = candidate
++                    break
++                logger.warning(
++                    "TTS chunk %d/%d attempt %d failed: %s",
++                    index, len(chunks), attempt, result.get("error"),
++                )
++            if actual is None:
++                logger.warning(
++                    "TTS chunk %d/%d gave up after 2 attempts", index, len(chunks)
++                )
++                break
++            paths.append(actual)
++    finally:
++        if token is not None:
++            try:
++                from gateway.session_context import _SESSION_PLATFORM
++
++                _SESSION_PLATFORM.reset(token)
++            except Exception:  # pragma: no cover - defensive
++                pass
++
++    return paths
++
++
++def cleanup_voice_chunks(paths) -> None:
++    """Best-effort deletion of generated audio files."""
++    for path in set(paths or ()):
++        if not path:
++            continue
++        try:
++            os.unlink(path)
++        except OSError:
++            pass
+diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
+index d81cd696f9..5df81ba880 100644
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -4797,10 +4797,61 @@ class TelegramAdapter(BasePlatformAdapter):
+                         chat_id=chat_id, file_path=audio_path, caption=caption, reply_to=reply_to, metadata=metadata)
+             return SendResult(success=True, message_id=str(msg.message_id))
+         except Exception as e:
++            # Flood control : Telegram nous bride, le fichier est bon.
++            # On attend le delai annonce et on rejoue, au lieu de deverser
++            # le chemin local dans la conversation (inutile pour l'usager).
++            retry_after = getattr(e, "retry_after", None)
++            err_str = str(e).lower()
++            if retry_after is not None or "retry in" in err_str or "retry after" in err_str:
++                try:
++                    wait = float(retry_after) if retry_after is not None else 5.0
++                except (TypeError, ValueError):
++                    wait = 5.0
++                if wait <= 90.0:
++                    logger.warning(
++                        "[%s] Telegram flood control sur la voix, attente %.1fs puis reprise", self.name, wait)
++                    await asyncio.sleep(wait + 1.0)
++                    try:
++                        with open(audio_path, "rb") as audio_file:
++                            ext = os.path.splitext(audio_path)[1].lower()
++                            _retry_thread = self._message_thread_id_for_send(self._metadata_thread_id(metadata))
++                            _envoi = self._bot.send_voice if ext in (".ogg", ".opus") else self._bot.send_audio
++                            _cle = "voice" if ext in (".ogg", ".opus") else "audio"
++                            msg = await _envoi(
++                                chat_id=int(chat_id), caption=self._caption_1024(caption),
++                                message_thread_id=_retry_thread, **{_cle: audio_file})
++                        return SendResult(success=True, message_id=str(msg.message_id))
++                    except Exception as retry_err:
++                        e = retry_err
++            # Coupure reseau (13:24 le 2026-10-04 : « Timed out ») : la voix
++            # etait perdue au premier rate. Deux reprises, a 3 s puis 8 s. Un
++            # doublon rare vaut mieux qu'une voix qui n'arrive jamais.
++            if retry_after is None and any(m in str(e).lower() for m in (
++                    "timed out", "timeout", "network", "connect", "reset by peer")):
++                for _pause in (3.0, 8.0):
++                    logger.warning(
++                        "[%s] voix Telegram : coupure reseau (%s), reprise dans %.0fs",
++                        self.name, _redact_telegram_error_text(e), _pause)
++                    await asyncio.sleep(_pause)
++                    try:
++                        with open(audio_path, "rb") as audio_file:
++                            ext = os.path.splitext(audio_path)[1].lower()
++                            _retry_thread = self._message_thread_id_for_send(self._metadata_thread_id(metadata))
++                            _envoi = self._bot.send_voice if ext in (".ogg", ".opus") else self._bot.send_audio
++                            _cle = "voice" if ext in (".ogg", ".opus") else "audio"
++                            msg = await _envoi(
++                                chat_id=int(chat_id), caption=self._caption_1024(caption),
++                                message_thread_id=_retry_thread, **{_cle: audio_file})
++                        logger.info("[%s] voix Telegram envoyee apres reprise", self.name)
++                        return SendResult(success=True, message_id=str(msg.message_id))
++                    except Exception as retry_err:
++                        e = retry_err
++            # Echec definitif : on journalise et on se tait. Publier le chemin
++            # d'un .ogg local dans le fil n'apporte rien a personne.
+             logger.error(
+-                "[%s] Failed to send Telegram voice/audio, falling back to base adapter: %s", self.name,
++                "[%s] Envoi de la voix Telegram abandonne (%s) : %s", self.name, audio_path,
+                 _redact_telegram_error_text(e), exc_info=True)
+-            return await super().send_voice(chat_id, audio_path, caption, reply_to, metadata=metadata)
++            return SendResult(success=False, error=str(e))
+         finally:
+             if _transcoded_voice_path:
+                 with contextlib.suppress(OSError):
