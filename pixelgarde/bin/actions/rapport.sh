@@ -169,6 +169,30 @@ trap 'rm -rf "$TMP"' EXIT
 # etaient recopies dans /tmp/pixel-voix-choix, que le rapport suivant
 # ecrasait avant que USER ait touche le bouton du premier.
 CHOIX_RAP=()
+BOUTONS_ETAT=""
+# Filet (2026-10-28) : le prefabricant lance les boutons des l'arrivee du
+# rapport, mais le mp3 pouvait partir avant eux (5474, 5480, 5487 : Detail
+# seul, 138 des 148 cas du 26 au 28/10). On attend le .choix 5 s au plus, et
+# seulement tant que le prefabricant tient son verrou : sans lui, rien ne vient.
+if [ -n "$CIBLE_ID" ] && [ ! -s "$CACHE/$CIBLE_ID.choix" ]; then
+  VERROU_RAP="${PIXEL_TMP:-/tmp}/qg-prevoix-$CIBLE_ID.lock"
+  DEBUT_RAP="$(date +%s%3N)"
+  for _ in $(seq 25); do
+    [ -s "$CACHE/$CIBLE_ID.choix" ] && break
+    ( flock -n 9 ) 9>"$VERROU_RAP" 2>/dev/null && break
+    sleep 0.2
+  done
+  ATTENTE_RAP="$(( $(date +%s%3N) - DEBUT_RAP ))"
+  if [ -s "$CACHE/$CIBLE_ID.choix" ]; then
+    BOUTONS_ETAT="boutons prets avant l'envoi (attente ${ATTENTE_RAP} ms)"
+  elif ( flock -n 9 ) 9>"$VERROU_RAP" 2>/dev/null; then
+    BOUTONS_ETAT="boutons absents (aucun calcul en cours, attente ${ATTENTE_RAP} ms)"
+  else
+    BOUTONS_ETAT="boutons en retard (${ATTENTE_RAP} ms)"
+  fi
+elif [ -n "$CIBLE_ID" ]; then
+  BOUTONS_ETAT="boutons prets avant l'envoi (attente 0 ms)"
+fi
 if [ -n "$CIBLE_ID" ] && [ -s "$CACHE/$CIBLE_ID.choix" ]; then
   MOTS_RAP="$(head -1 "$CACHE/$CIBLE_ID.choix" | tr -d "'\n")"
   CHOIX_RAP=(--es choix "'$MOTS_RAP'")
@@ -176,8 +200,11 @@ elif printf '%s' "$TXT" | grep -qi "rien à décider"; then
   # Boutons non calcules : le telephone montrerait Oui Non Detail. Rien a
   # valider ici, Oui n'a pas de sens (2026-10-03, 10:41).
   CHOIX_RAP=(--es choix "'detail:Détail'")
+elif [ -n "$CIBLE_ID" ] && printf '%s' "$TXT" | tail -c 240 | grep -q '?'; then
+  # Boutons perdus mais le rapport pose une question : Oui et Non par defaut.
+  CHOIX_RAP=(--es choix "'oui:Oui|non:Non'")
 fi
-echo "$(date '+%F %T') boutons ${CIBLE_ID:-?} : ${CHOIX_RAP[*]:-aucun, Detail seul}" >> "$HOME/.hermes/logs/rapport.log"
+echo "$(date '+%F %T') boutons ${CIBLE_ID:-?} : ${CHOIX_RAP[*]:-aucun, Detail seul}${BOUTONS_ETAT:+ | $BOUTONS_ETAT}" >> "$HOME/.hermes/logs/rapport.log"
 
 # La voix : la paire du cache si elle est faite d'avance, sinon on fabrique,
 # comme avant : le mp3 du telephone ici, la bulle Telegram par

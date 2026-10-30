@@ -10,28 +10,11 @@
       "schedule_display": "45 7 * * *",
       "repeat": {
         "times": null,
-        "completed": 64
+        "completed": 66
       },
       "deliver": "local",
       "script": "qg-resumer.py",
       "enabled": true
-    },
-    {
-      "name": "Coach quotidien focus",
-      "prompt": "Envoie a USER le texte du coach ci-dessus, tel quel, sans rien ajouter ni commenter.",
-      "schedule": {
-        "kind": "cron",
-        "expr": "52 7 * * *",
-        "display": "52 7 * * *"
-      },
-      "schedule_display": "52 7 * * *",
-      "repeat": {
-        "times": null,
-        "completed": 2
-      },
-      "deliver": "telegram:__QG_CHAT__:__COACH_THREAD__",
-      "script": "focus-coach.py",
-      "enabled": false
     },
     {
       "name": "Veille IA et GitHub",
@@ -44,7 +27,7 @@
       "schedule_display": "35 9,19 * * *",
       "repeat": {
         "times": null,
-        "completed": 65
+        "completed": 68
       },
       "deliver": "telegram:__QG_CHAT__:__QG_THREAD__",
       "script": "veille-ia.py",

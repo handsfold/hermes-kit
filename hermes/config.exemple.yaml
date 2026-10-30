@@ -1,7 +1,8 @@
 model:
-  default: claude-opus-5-5
-  provider: anthropic
+  default: claude-sonnet-5-5
+  provider: claude-proxy
   base_url: http://localhost:8000
+  api_mode: anthropic_messages
 fallback_providers: []
 credential_pool_strategies:
   openrouter: fill_first
@@ -87,6 +88,12 @@ agent:
     technical: You are a technical expert. Provide detailed, accurate technical information.
     uwu: hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you! *nuzzles your code* OwO what's this? wet me take a wook! i pwomise to be vewy hewpful >w<
   reasoning_effort: medium
+  reasoning_overrides:
+    glm-5.3-flash-abliterated: high
+    glm-5.3-abliterated: high
+    deepseek-v4.1-flash-abliterated: high
+    deepseek-v4.1-flash-fast: high
+    minimax-m3.1-flash: high
   verbose: 'off'
 terminal:
   backend: local
@@ -228,7 +235,7 @@ display:
   tool_progress_command: false
   tool_preview_length: 0
   background_process_notifications: concise
-  tool_progress: off
+  tool_progress: false
 dashboard:
   theme: cyberpunk
   font: system-mono
@@ -423,7 +430,7 @@ security:
   tirith_enabled: false
   protected_instruction_files: false
 cron:
-  script_timeout_seconds: 18000  # boucle des skills sans plafond (USER, 2026-10-27) : ~7 min par skill
+  script_timeout_seconds: 18000
   wrap_response: true
 code_execution:
   mode: project
@@ -732,8 +739,6 @@ platforms:
           - voice
           - help
 providers:
-  # Routeur scinde en 3 groupes dans /model (2026-10-20) : meme URL, en-tete X-Groupe different.
-  # Le fournisseur « routeur » doit rester celui de Claude (model_catalog.claude_via).
   claude-proxy:
     name: Claude (routeur)
     base_url: http://localhost:8000
@@ -741,7 +746,7 @@ providers:
     api_mode: anthropic_messages
     discover_models: false
     context_length: 200000
-    model: claude-sonnet-5-5-low
+    model: claude-sonnet-5-5
     extra_headers:
       X-Groupe: claude
     models:
@@ -754,6 +759,18 @@ providers:
       claude-sonnet-4-5:
         context_length: 1000000
       claude-haiku-4-5:
+        context_length: 200000
+      claude-sonnet-5-5:
+        context_length: 200000
+      claude-haiku-5-5:
+        context_length: 200000
+      claude-fable-5-1:
+        context_length: 200000
+      deepseek-flash:
+        context_length: 200000
+      deepseek-v4-pro:
+        context_length: 200000
+      glm-5-2-venice:
         context_length: 200000
   routeur-api:
     name: Autres modeles (routeur)
@@ -814,34 +831,29 @@ providers:
     base_url: https://api.venice.ai/api/v1
     key_env: VENICE_API_KEY
     api_mode: chat_completions
-    # Seul le modele sans censure de Venice : les 130 autres sont deja sur OpenRouter (2026-10-15).
     discover_models: false
     model: venice-uncensored-1-2
     models:
       venice-uncensored-1-2:
         context_length: 128000
-
-# ── Fallback Model ────────────────────────────────────────────────────
-# Automatic provider failover when primary is unavailable.
-# Uncomment and configure to enable. Triggers on rate limits (429),
-# overload (529), service errors (503), or connection failures.
-#
-# Supported providers:
-#   openrouter   (OPENROUTER_API_KEY)  - routes to any model
-#   openai-codex (OAuth - hermes auth) - OpenAI Codex
-#   nous         (OAuth - hermes auth) - Nous Portal
-#   zai          (ZAI_API_KEY)         - Z.AI / GLM
-#   kimi-coding  (KIMI_API_KEY)        - Kimi / Moonshot
-#   kimi-coding-cn (KIMI_CN_API_KEY)   - Kimi / Moonshot (China)
-#   minimax      (MINIMAX_API_KEY)     - MiniMax
-#   minimax-cn   (MINIMAX_CN_API_KEY)  - MiniMax (China)
-#   bedrock      (AWS IAM / boto3)     - AWS Bedrock (Converse API)
-#
-# For custom OpenAI-compatible endpoints, add base_url and key_env.
-#
-# fallback_model:
-#   provider: openrouter
-#   model: anthropic/claude-sonnet-4
+  refuseless:
+    name: Refuseless
+    base_url: https://api.refuseless.com/v1
+    key_env: REFUSELESS_API_KEY
+    api_mode: chat_completions
+    discover_models: false
+    model: glm-5.3-flash-abliterated
+    models:
+      glm-5.3-flash-abliterated:
+        context_length: 1048576
+      glm-5.3-abliterated:
+        context_length: 1048576
+      deepseek-v4.1-flash-abliterated:
+        context_length: 1048576
+      deepseek-v4.1-flash-fast:
+        context_length: 1048576
+      minimax-m3.1-flash:
+        context_length: 1048576
 known_plugin_toolsets:
   cli:
     - homeassistant

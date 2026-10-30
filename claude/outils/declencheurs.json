@@ -223,7 +223,8 @@
     "chemin": "~/.claude/skills/negociation-creance/SKILL.md",
     "forcer": false,
     "motifs": [
-      "(elle|il) me doit.{0,60}(argent|rembours|pr[êe]t)",
+      "\\b(proche|associee|famille)\\b.{0,60}(argent|dette|rembours|pr[êe]t|doit|cr[ée]ance|[ée]ch[ée]ance)",
+      "(argent|dette|rembours|pr[êe]t|cr[ée]ance|[ée]ch[ée]ance).{0,60}\\b(proche|associee|famille)\\b",
       "rembours\\w+.{0,40}(pr[êe]t|dette|cr[ée]ance)",
       "cr[ée]ance"
     ]
