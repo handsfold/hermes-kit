@@ -2,6 +2,7 @@
 name: trouver-skill
 description: "Cherche une skill, trouve un skill, skills.sh : importer. Cherche une skill sur skills.sh, anthropics/skills et les listes awesome, la classe par confiance et étoiles, l'installe, puis met son en-tête au format USER sans toucher à son corps. Pas pour créer une skill (voir fabrique-skill), ni pour mettre à jour (voir update-all-skills)."
 when_to_use: "USER dit « chercher des skills pour faire ça », « trouver des skills qui existent », « cherche une skill pour », « il existe un skill pour ça ? », « regarde sur skills.sh », « importe cette skill ». Aussi avant d'écrire une skill pour un besoin qui revient. Pas pour créer ou améliorer une skill maison (voir fabrique-skill)."
+disable-model-invocation: true
 ---
 
 # Trouver une skill

@@ -1,6 +1,7 @@
 ---
 name: wallet-entropy-audit
 description: Auditer l'entropie des hardware wallets Bitcoin.
+disable-model-invocation: true
 ---
 
 # Wallet Entropy Audit

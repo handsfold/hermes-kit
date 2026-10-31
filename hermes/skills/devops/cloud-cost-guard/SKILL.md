@@ -6,6 +6,7 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [cloud, modal, cout, batch, parallel]
+disable-model-invocation: true
 ---
 
 # Cloud Cost Guard

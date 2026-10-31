@@ -691,7 +691,7 @@ def avec_compagnes(choix, connus):
     return out
 
 
-CONTEXTE_CHARS = 300
+CONTEXTE_CHARS = 1500  # banc du 2026-10-31 : 1500 > 800 > 300 (handsfold-skills.md)
 
 
 def requete(texte, precedent=""):

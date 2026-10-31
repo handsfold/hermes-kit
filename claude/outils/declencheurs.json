@@ -1,9 +1,38 @@
 {
   "_lisez-moi": "Mots qui doivent declencher une skill. Partage par usage-skills.py --rates (mesure des rates) et hooks/skills-forcees.py (forcage). 'forcer': true = le hook impose la skill. Motifs = regex Python, insensibles a la casse.",
-  "entreprise-a-index": {
-    "chemin": "~/.claude/skills/entreprise-a-index/SKILL.md",
+  "entreprise-a": {
+    "chemin": "~/.claude/skills/entreprise-a/SKILL.md",
     "forcer": true,
     "motifs": [
+      "\\bentreprise-a\\b.{0,60}\\b(documents?|e-?mails?|mails?|pdf|prix|commandes?|stock|ventes?|rapports?|contrats?|photos?|chiffres?|tableurs?|excel)\\b|\\b(documents?|e-?mails?|mails?|pdf|prix|commandes?|stock|ventes?|rapports?|contrats?|photos?|chiffres?|tableurs?|excel)\\b.{0,60}\\bentreprise-a\\b",
+      "\\bmarque-e\\b",
+      "\\bkana\\b",
+      "\\bwatsons\\b",
+      "\\bkonvy\\b",
+      "eve ?(and|&) ?boy",
+      "\\bbeautrium\\b",
+      "\\byenpe\\b",
+      "\\bcentral (food|retail|department)\\b",
+      "bon de commande",
+      "\\bpurchase order\\b",
+      "fiche produit",
+      "\\bfactures? (de |du |d')?(fournisseur|watsons|konvy|central|eve|marque-e|l'usine)",
+      "portail (fournisseur )?watsons",
+      "watsons connect",
+      "centrale watsons",
+      "supplierportal",
+      "vendor center",
+      "ebvendor",
+      "tiktok shop",
+      "seller center",
+      "produits? (en alerte|rejet[ée]s?|suspendus?)",
+      "[çc]a se vend\\s*\\?",
+      "sell[- ]?(in|out)",
+      "o[ùu] est pass[ée] le stock",
+      "combien on va toucher",
+      "consignation"
+    ],
+    "motifs_forces": [
       "\\bentreprise-a\\b.{0,60}\\b(documents?|e-?mails?|mails?|pdf|prix|commandes?|stock|ventes?|rapports?|contrats?|photos?|chiffres?|tableurs?|excel)\\b|\\b(documents?|e-?mails?|mails?|pdf|prix|commandes?|stock|ventes?|rapports?|contrats?|photos?|chiffres?|tableurs?|excel)\\b.{0,60}\\bentreprise-a\\b",
       "\\bmarque-e\\b",
       "\\bkana\\b",
@@ -19,10 +48,32 @@
       "\\bfactures? (de |du |d')?(fournisseur|watsons|konvy|central|eve|marque-e|l'usine)"
     ]
   },
-  "mail-redaction": {
-    "chemin": "~/.claude/skills/mail-redaction/SKILL.md",
+  "messages": {
+    "chemin": "~/.claude/skills/messages/SKILL.md",
     "forcer": true,
     "motifs": [
+      "[ée]cris[- ](leur|lui)",
+      "fais (un|le) mail",
+      "r[ée]ponds[- ](leur|lui)",
+      "\\brelance[- ](leur|lui)\\b|\\brelance[- ]les (fournisseurs|clients|enseignes|distributeurs|transporteurs)",
+      "relance (le|la) (fournisseur|client|transporteur|enseigne|distributeur|acheteu)",
+      "pr[ée]pare (le|un) brouillon",
+      "dis[- ]leur que",
+      "envoie[- ]leur",
+      "message (line|à) (leur|lui|la |le |l')",
+      "signe ce document",
+      "mets mon tampon",
+      "renvoie[- ]leur sign[ée]",
+      "il faut que je signe",
+      "\\b(proche|associee|famille)\\b.{0,60}(argent|dette|rembours|pr[êe]t|doit|cr[ée]ance|[ée]ch[ée]ance)",
+      "(argent|dette|rembours|pr[êe]t|cr[ée]ance|[ée]ch[ée]ance).{0,60}\\b(proche|associee|famille)\\b",
+      "rembours\\w+.{0,40}(pr[êe]t|dette|cr[ée]ance)",
+      "cr[ée]ance",
+      "aborder une (fille|femme)",
+      "s[ée]duction",
+      "seduction-bond"
+    ],
+    "motifs_forces": [
       "[ée]cris[- ](leur|lui)",
       "fais (un|le) mail",
       "r[ée]ponds[- ](leur|lui)",
@@ -34,56 +85,64 @@
       "message (line|à) (leur|lui|la |le |l')"
     ]
   },
-  "captcha-relais": {
-    "chemin": "~/.claude/skills/captcha-relais/SKILL.md",
+  "navigateur": {
+    "chemin": "~/.claude/skills/navigateur/SKILL.md",
     "forcer": true,
     "motifs": [
       "captcha",
       "verify to continue",
       "puzzle [àa] glisser",
-      "slider de v[ée]rification"
+      "slider de v[ée]rification",
+      "(cherche|ouvre|regarde|trouve|pilote|contr[ôo]le|capture|photo|fichiers?|appli)\\b.{0,40}mon t[ée]l[ée]phone|mon t[ée]l[ée]phone.{0,40}\\b(fichiers?|capture|photo|contr[ôo]le|ouvre|appli)",
+      "(sur|depuis|avec|dans|ouvre|pilote|regarde) (le|mon) pixel\\b",
+      "\\badb\\b.{0,40}(connect|t[ée]l[ée]phone|pixel|capture|tailscale)",
+      "espace priv[ée]",
+      "(ajoute|mets).*(agenda|calendrier)",
+      "rappelle[- ]moi le",
+      "(donne|trouve|cherche|retrouve|utilise|quel est|c'est quoi|mets?)[^.?!]{0,25}mot de passe",
+      "connecte[- ]toi (à|a|sur)",
+      "\\bse connecter (à|a|sur)\\b",
+      "cr[ée]e (un|le) compte",
+      "donne[- ]moi (le|les|mes|son|ses) (mot de passe|identifiants?|acc[eè]s)",
+      "mot de passe (du|de l'|de la|pour (le|la|mon)) ?(compte|site)",
+      "\\b(donne|trouve|cherche|ajoute|mets?|utilise|retrouve|r[ée]cup[èe]re)\\w*\\b[^.?!]{0,30}\\bidentifiants?\\b",
+      "\\bidentifiants? (du|de la|de l'|pour|google|amazon|1688|alibaba|seller)",
+      "\\b(le|au|du|dans le) coffre (de l'agent|vaultwarden|d'identifiants|de mots de passe)",
+      "(?<![/.\\w-])login(?![/?\\w])(?!.{0,15}requis)",
+      "envoyer en tant que",
+      "alias gmail",
+      "mail-tester",
+      "pc entreprise-a",
+      "ordi(nateur)? (de la soci[ée]t[ée]|du bureau)",
+      "\\bflash ?express\\b",
+      "\\bline\\b.{0,30}(pc|bureau)",
+      "\\bpc (de la soci[ée]t[ée]|du bureau)\\b",
+      "anti-?bot",
+      "lire (une page |un site )?ebay",
+      "ma page (ouverte|internet)",
+      "l'onglet o[ùu] je suis",
+      "la fen[êe]tre ouverte",
+      "page internet qui est ouverte"
+    ],
+    "motifs_forces": [
+      "captcha",
+      "verify to continue",
+      "puzzle [àa] glisser",
+      "slider de v[ée]rification",
+      "(donne|trouve|cherche|retrouve|utilise|quel est|c'est quoi|mets?)[^.?!]{0,25}mot de passe",
+      "connecte[- ]toi (à|a|sur)",
+      "\\bse connecter (à|a|sur)\\b",
+      "cr[ée]e (un|le) compte",
+      "donne[- ]moi (le|les|mes|son|ses) (mot de passe|identifiants?|acc[eè]s)",
+      "mot de passe (du|de l'|de la|pour (le|la|mon)) ?(compte|site)",
+      "\\b(donne|trouve|cherche|ajoute|mets?|utilise|retrouve|r[ée]cup[èe]re)\\w*\\b[^.?!]{0,30}\\bidentifiants?\\b",
+      "\\bidentifiants? (du|de la|de l'|pour|google|amazon|1688|alibaba|seller)",
+      "\\b(le|au|du|dans le) coffre (de l'agent|vaultwarden|d'identifiants|de mots de passe)",
+      "(?<![/.\\w-])login(?![/?\\w])(?!.{0,15}requis)"
     ]
   },
-  "watsons-supplier-portal": {
-    "chemin": "~/.claude/skills/watsons-supplier-portal/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "portail (fournisseur )?watsons",
-      "watsons connect",
-      "centrale watsons",
-      "supplierportal"
-    ]
-  },
-  "eve-and-boy-vendor-center": {
-    "chemin": "~/.claude/skills/eve-and-boy-vendor-center/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "vendor center",
-      "ebvendor"
-    ]
-  },
-  "tiktok-shop-seller": {
-    "chemin": "~/.claude/skills/tiktok-shop-seller/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "tiktok shop",
-      "seller center",
-      "produits? (en alerte|rejet[ée]s?|suspendus?)"
-    ]
-  },
-  "entreprise-a-analyse-distributeurs": {
-    "chemin": "~/.claude/skills/entreprise-a-analyse-distributeurs/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "[çc]a se vend\\s*\\?",
-      "sell[- ]?(in|out)",
-      "o[ùu] est pass[ée] le stock",
-      "combien on va toucher",
-      "consignation"
-    ]
-  },
-  "charte-ux": {
-    "chemin": "~/.claude/skills/charte-ux/SKILL.md",
+  "construire": {
+    "chemin": "~/.claude/skills/construire/SKILL.md",
     "forcer": true,
     "motifs": [
       "\\bux\\b",
@@ -93,18 +152,27 @@
       "adapte au mobile",
       "(refais|am[ée]liore|cr[ée]e|change|ajoute|corrige|r[ée]organise|simplifie).{0,30}\\b(interface|[ée]cran|menu|page)\\b",
       "l'interface (est|n'est|devient|doit)",
-      "\\b(ajoute|cr[ée]e|change|mets?|refais|corrige|d[ée]place|supprime|retire|oubli[ée])\\w*\\b.{0,25}\\bboutons?\\b"
-    ]
-  },
-  "verifier-avant-livraison": {
-    "chemin": "~/.claude/skills/verifier-avant-livraison/SKILL.md",
-    "forcer": false,
-    "motifs": [
+      "\\b(ajoute|cr[ée]e|change|mets?|refais|corrige|d[ée]place|supprime|retire|oubli[ée])\\w*\\b.{0,25}\\bboutons?\\b",
       "corrige (ce|le) bug",
       "livre[- ]moi",
       "(^|\\]\\s*)(alors |et )?c.est bon \\?\\s*$",
       "ajoute cette fonction",
-      "c.est en ligne \\?"
+      "c.est en ligne \\?",
+      "nouveau projet",
+      "d[ée]marre un projet",
+      "initialise un projet",
+      "\\bscaffold\\b",
+      "cr[ée]e le squelette"
+    ],
+    "motifs_forces": [
+      "\\bux\\b",
+      "(?<![-\\w])ui(?![-\\w])",
+      "mise en page",
+      "plus lisible",
+      "adapte au mobile",
+      "(refais|am[ée]liore|cr[ée]e|change|ajoute|corrige|r[ée]organise|simplifie).{0,30}\\b(interface|[ée]cran|menu|page)\\b",
+      "l'interface (est|n'est|devient|doit)",
+      "\\b(ajoute|cr[ée]e|change|mets?|refais|corrige|d[ée]place|supprime|retire|oubli[ée])\\w*\\b.{0,25}\\bboutons?\\b"
     ]
   },
   "fil": {
@@ -118,8 +186,8 @@
       "la derni[èe]re fois (qu.on|que (je t|tu m))"
     ]
   },
-  "recherche-thai": {
-    "chemin": "~/.hermes/skills/research/recherche-thai/SKILL.md",
+  "recherche": {
+    "chemin": "~/.claude/skills/recherche/SKILL.md",
     "forcer": false,
     "motifs": [
       "tha[ïi]lande.{0,40}(prix|co[ûu]te|taux|loi|l[ée]gal|r[èe]gle|douane)",
@@ -129,7 +197,30 @@
       "soci[ée]t[ée] tha[ïi]e",
       "\\bdouanes? tha[ïi]",
       "\\bvisa\\b",
-      "\\bfda tha[ïi]"
+      "\\bfda tha[ïi]",
+      "quoi de neuf sur",
+      "en ce moment.{0,30}(marche|dit|parle)",
+      "le meilleur outil actuel",
+      "avis r[ée]cents",
+      "qu.est-ce qui manque",
+      "quelle (est la )?meilleure (option|strat[ée]gie)",
+      "je dois d[ée]cider",
+      "que me conseilles-tu",
+      "tu me conseilles quoi",
+      "je fais quoi \\?",
+      "cherche vraiment",
+      "\\bcreuse\\b",
+      "paywall",
+      "forum ferm[ée]",
+      "cherche[- ]moi sur (internet|le web)",
+      "cherche sur (internet|le web)",
+      "recherche sur internet",
+      "crawl4ai",
+      "scraper (un |ce |le )?site",
+      "scrape[rz]? (ce|le|un|tout le) site",
+      "\\bcrawle",
+      "lequel tu prends",
+      "[çc]a vaut le coup"
     ]
   },
   "film-telecharger": {
@@ -138,16 +229,6 @@
     "motifs": [
       "t[ée]l[ée]charge.*film",
       "film.*(vf|vostfr|1080p)"
-    ]
-  },
-  "pixel-pilotage": {
-    "chemin": "~/.hermes/skills/automation/pixel-pilotage/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "(cherche|ouvre|regarde|trouve|pilote|contr[ôo]le|capture|photo|fichiers?|appli)\\b.{0,40}mon t[ée]l[ée]phone|mon t[ée]l[ée]phone.{0,40}\\b(fichiers?|capture|photo|contr[ôo]le|ouvre|appli)",
-      "(sur|depuis|avec|dans|ouvre|pilote|regarde) (le|mon) pixel\\b",
-      "\\badb\\b.{0,40}(connect|t[ée]l[ée]phone|pixel|capture|tailscale)",
-      "espace priv[ée]"
     ]
   },
   "patrimoine-thailande": {
@@ -172,119 +253,6 @@
       "audiobookshelf"
     ]
   },
-  "google-agenda-chrome": {
-    "chemin": "~/.claude/skills/google-agenda-chrome/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "(ajoute|mets).*(agenda|calendrier)",
-      "rappelle[- ]moi le"
-    ]
-  },
-  "signer-document": {
-    "chemin": "~/.claude/skills/signer-document/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "signe ce document",
-      "mets mon tampon",
-      "renvoie[- ]leur sign[ée]",
-      "il faut que je signe"
-    ]
-  },
-  "etude-marketing": {
-    "chemin": "~/.claude/skills/etude-marketing/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "mots?[- ]cl[ée]s",
-      "(?<!for )\\bseo\\b",
-      "(?<!compte )(?<!facture )data ?for ?seo",
-      "google trends",
-      "slogan",
-      "donne envie d'acheter",
-      "accroches? (de |d'une |pour (la |une )?)?(pub|fiche|marque-e|projet-a|titre)"
-    ]
-  },
-  "coffre-identifiants": {
-    "chemin": "~/.claude/skills/coffre-identifiants/SKILL.md",
-    "forcer": true,
-    "motifs": [
-      "(donne|trouve|cherche|retrouve|utilise|quel est|c'est quoi|mets?)[^.?!]{0,25}mot de passe",
-      "connecte[- ]toi (à|a|sur)",
-      "\\bse connecter (à|a|sur)\\b",
-      "cr[ée]e (un|le) compte",
-      "donne[- ]moi (le|les|mes|son|ses) (mot de passe|identifiants?|acc[eè]s)",
-      "mot de passe (du|de l'|de la|pour (le|la|mon)) ?(compte|site)",
-      "\\b(donne|trouve|cherche|ajoute|mets?|utilise|retrouve|r[ée]cup[èe]re)\\w*\\b[^.?!]{0,30}\\bidentifiants?\\b",
-      "\\bidentifiants? (du|de la|de l'|pour|google|amazon|1688|alibaba|seller)",
-      "\\b(le|au|du|dans le) coffre (de l'agent|vaultwarden|d'identifiants|de mots de passe)",
-      "(?<![/.\\w-])login(?![/?\\w])(?!.{0,15}requis)"
-    ]
-  },
-  "negociation-creance": {
-    "chemin": "~/.claude/skills/negociation-creance/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "(elle|il) me doit.{0,60}(argent|rembours|pr[êe]t)",
-      "rembours\\w+.{0,40}(pr[êe]t|dette|cr[ée]ance)",
-      "cr[ée]ance"
-    ]
-  },
-  "fiche-produit-amazon": {
-    "chemin": "~/.claude/skills/fiche-produit-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "fiche produit amazon",
-      "valide ce produit",
-      "analyse ce candidat",
-      "compare les finalistes",
-      "lequel choisir",
-      "produit candidat",
-      "avatars? d.acheteurs?"
-    ]
-  },
-  "fournisseurs-amazon": {
-    "chemin": "~/.claude/skills/fournisseurs-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "trouve.{0,20}(fournisseurs?|usines?)",
-      "\\bsourcing\\b",
-      "\\b1688\\b",
-      "\\balibaba\\b",
-      "(n[ée]gocier|parler?|relancer?|devis).{0,25}\\b(l.)?usine\\b",
-      "qui peut (le |la |les )?fabriquer",
-      "\\b[ée]chantillons?\\b.{0,40}(usine|fournisseur|1688|alibaba)",
-      "command\\w*.{0,20}\\b[ée]chantillons?\\b"
-    ]
-  },
-  "audit-niche-amazon": {
-    "chemin": "~/.claude/skills/audit-niche-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "audit de niche",
-      "est-ce qu.on peut rentrer",
-      "vrai produit gagnant",
-      "valide.{0,20}niche"
-    ]
-  },
-  "etude-marche-amazon": {
-    "chemin": "~/.claude/skills/etude-marche-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "[ée]tude de march[ée]",
-      "quel livre publier",
-      "\\bkdp\\b.{0,40}(niche|livre|publier|march[ée]|vend)",
-      "quelle niche"
-    ]
-  },
-  "etude-leaders-amazon": {
-    "chemin": "~/.claude/skills/etude-leaders-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "leader.{0,20}pays",
-      "combien d.avis a le n.?1",
-      "unit[ée]s par mois",
-      "cross.?market"
-    ]
-  },
   "opencli-browser": {
     "chemin": "~/.claude/skills/opencli-browser/SKILL.md",
     "forcer": false,
@@ -294,25 +262,6 @@
       "ma page",
       "page ouverte",
       "seller central"
-    ]
-  },
-  "gmail-envoi-en-tant-que": {
-    "chemin": "~/.claude/skills/gmail-envoi-en-tant-que/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "envoyer en tant que",
-      "alias gmail",
-      "mail-tester"
-    ]
-  },
-  "pc-entreprise-a": {
-    "chemin": "~/.claude/skills/pc-entreprise-a/SKILL.md",
-    "motifs": [
-      "pc entreprise-a",
-      "ordi(nateur)? (de la soci[ée]t[ée]|du bureau)",
-      "\\bflash ?express\\b",
-      "\\bline\\b.{0,30}(pc|bureau)",
-      "\\bpc (de la soci[ée]t[ée]|du bureau)\\b"
     ]
   },
   "agent-reach": {
@@ -327,16 +276,6 @@
       "\\bbilibili\\b"
     ]
   },
-  "recherche-fraiche": {
-    "chemin": "~/.claude/skills/recherche-fraiche/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "quoi de neuf sur",
-      "en ce moment.{0,30}(marche|dit|parle)",
-      "le meilleur outil actuel",
-      "avis r[ée]cents"
-    ]
-  },
   "omi-local": {
     "chemin": "~/.claude/skills/omi-local/SKILL.md",
     "forcer": false,
@@ -346,33 +285,57 @@
       "mes conversations enregistr"
     ]
   },
-  "fait-manquant": {
-    "chemin": "~/.claude/skills/fait-manquant/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "qu.est-ce qui manque",
-      "quelle (est la )?meilleure (option|strat[ée]gie)",
-      "je dois d[ée]cider",
-      "que me conseilles-tu",
-      "tu me conseilles quoi",
-      "je fais quoi \\?"
-    ]
-  },
-  "nouveau-projet": {
-    "chemin": "~/.claude/skills/nouveau-projet/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "nouveau projet",
-      "d[ée]marre un projet",
-      "initialise un projet",
-      "\\bscaffold\\b",
-      "cr[ée]e le squelette"
-    ]
-  },
-  "fabrique-skill": {
-    "chemin": "~/.claude/skills/fabrique-skill/SKILL.md",
+  "atelier": {
+    "chemin": "~/.claude/skills/atelier/SKILL.md",
     "forcer": true,
     "motifs": [
+      "\\b(cr[ée]e[rsz]?|fabrique[rz]?|am[ée]liore[rz]?|revois|revoir|audite[rz]?)\\b.{0,20}\\b(un|une|des|les|ce|cette|nos|tous les|ta|la)? ?skills?\\b",
+      "\\b(fais|faire|fasses?|fait)\\b (un|une|des)( \\w+){0,2} skills?\\b",
+      "\\bskills?\\b.{0,20}\\b(cr[ée]e[rsz]?|fabrique|am[ée]liore|revois|revoir|review|audite)",
+      "\\bnouveau(x)? skills?\\b",
+      "transforme(r)? (ça|ca|ceci|cela) en skill",
+      "pourquoi .{0,30}skill.{0,30}(pas )?(charg|d[ée]clench)",
+      "codex cli",
+      "d[ée]l[èe]gue (à |a )?codex",
+      "lance codex",
+      "transcris (cet|ce|l[ae]|mon) (audio|vocal|enregistrement|fichier audio)",
+      "(mets|passe) (ce|le|mon) vocal en texte",
+      "\\bgroq\\b.{0,30}\\bwhisper\\b|\\bwhisper\\b.{0,30}\\bgroq\\b",
+      "instance hermes",
+      "instance cloisonn[ée]e",
+      "hermes cloisonn",
+      "topxl.{0,30}hermes[- ]kit",
+      "(publie|push|pousse|modifie|mets? [àa] jour).{0,25}hermes[- ]kit",
+      "hermes[- ]kit.{0,25}(d[ée]p[ôo]t|github|publi)",
+      "routeur llm",
+      "changer de mod[èe]le hermes",
+      "\\b8010\\b",
+      "topic muet",
+      "(cr[ée]e|renomme|re-?route|fais taire).{0,20}topic",
+      "d[ée]boublonner.{0,20}topic",
+      "prime agent",
+      "agents? prime",
+      "vj_prime_agent_bot",
+      "thread 11025",
+      "unit[ée]s? systemd",
+      "timers? systemd",
+      "service systemd",
+      "mets? [àa] jour (mes |toutes les )?skills",
+      "update all skills",
+      "update everything",
+      "tout mettre [àa] jour.{0,20}skills?",
+      "surveill\\w+ les quotas",
+      "quota (claude|codex|openrouter|api)",
+      "pipeline (vocal|voix)",
+      "\\bstt\\b.{0,30}\\btts\\b",
+      "\\bnon mesur[ée]e?s?\\b",
+      "\\b(co[uû]ts?|conso(mmation)?)\\b.{0,40}\\b(pas|non) mesur",
+      "\\bmesur(e|er) (tout|partout)\\b",
+      "\\btout traquer\\b",
+      "\\bmesure-partout\\b",
+      "\\bcontrole-mesure\\b"
+    ],
+    "motifs_forces": [
       "\\b(cr[ée]e[rsz]?|fabrique[rz]?|am[ée]liore[rz]?|revois|revoir|audite[rz]?)\\b.{0,20}\\b(un|une|des|les|ce|cette|nos|tous les|ta|la)? ?skills?\\b",
       "\\b(fais|faire|fasses?|fait)\\b (un|une|des)( \\w+){0,2} skills?\\b",
       "\\bskills?\\b.{0,20}\\b(cr[ée]e[rsz]?|fabrique|am[ée]liore|revois|revoir|review|audite)",
@@ -381,50 +344,79 @@
       "pourquoi .{0,30}skill.{0,30}(pas )?(charg|d[ée]clench)"
     ]
   },
-  "sourcing-usines-chine": {
-    "chemin": "~/.hermes/skills/commerce/sourcing-usines-chine/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "\\busines?\\b.{0,40}(chin|1688|alibaba|made.in.china)|(chin|1688|alibaba).{0,40}\\busines?\\b",
-      "(demander|demande) (des |un )?devis",
-      "usine ou n[ée]goce"
-    ]
-  },
-  "acces-sites-fournisseurs-chine": {
-    "chemin": "~/.hermes/skills/commerce/acces-sites-fournisseurs-chine/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "captcha.{0,30}(1688|alibaba)",
-      "(1688|alibaba).{0,40}(captcha|bloqu|slider|v[ée]rif)",
-      "0 captcha"
-    ]
-  },
-  "achat-engagement-smm": {
-    "chemin": "~/.hermes/skills/commerce/achat-engagement-smm/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "panels? smm",
-      "acheter des (followers|abonn[ée]s|likes)",
-      "\\bsmm\\b"
-    ]
-  },
-  "agent-reach-hermes": {
-    "chemin": "~/.claude/skills/agent-reach-hermes/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "cherche[- ]moi sur (internet|le web)",
-      "cherche sur (internet|le web)",
-      "recherche sur internet"
-    ]
-  },
-  "analyse-video": {
-    "chemin": "~/.agents/skills/analyse-video/SKILL.md",
+  "short": {
+    "chemin": "~/.claude/skills/short/SKILL.md",
     "forcer": false,
     "motifs": [
       "analyse (cette |la |ce )?(vid[ée]o|reel|short)",
       "d[ée]cortique.{0,25}(vid[ée]o|reel|short)",
       "planche contact",
-      "s'inspirer de (cette|la) vid[ée]o"
+      "s'inspirer de (cette|la) vid[ée]o",
+      "rel[èe]ve les stats",
+      "bilan de la semaine",
+      "quel format marche",
+      "combien de vues",
+      "dirige la voix",
+      "feuille de direction",
+      "elle lit au lieu de raconter",
+      "direction de voix",
+      "monte ce short",
+      "monte v\\d\\d",
+      "mes rushes",
+      "rushes? bruts?",
+      "plan de contenu",
+      "plan de publication",
+      "calendrier [ée]ditorial",
+      "planifie mes shorts",
+      "qu'est-ce que je publie",
+      "la cam[ée]ra est plate",
+      "pas assez dynamique",
+      "plus d'effets",
+      "coups? de cam[ée]ra",
+      "raconte mieux",
+      "comme alfred",
+      "fa[cç]on alfred",
+      "alfred\\.explique",
+      "l'histoire est nulle",
+      "storyboard anim[ée]",
+      "shotbook",
+      "[ée]cris un script",
+      "script de (short|reel)",
+      "id[ée]e de vid[ée]o farang",
+      "note ce script",
+      "r[ée]{1,2}cris ce script",
+      "short anim[ée]",
+      "anime ce script",
+      "vin en cubes",
+      "version voxel",
+      "univers minecraft",
+      "refais v0\\d",
+      "p[âa]te [àa] modeler",
+      "claymation",
+      "stop-?motion",
+      "planches? de caract[èe]re",
+      "trouve des sujets",
+      "de quoi (je pourrais |je devrais |on pourrait )?parler",
+      "id[ée]es de vid[ée]os",
+      "n'int[ée]resse personne",
+      "change de sujet",
+      "voix off",
+      "fais la voix",
+      "style eleven ?lab",
+      "g[ée]n[èe]re la voix",
+      "rends la voix moins plate",
+      "\\bhooks?\\b.{0,40}\\b(short|reel|tiktok|vid[eé]o|script|d[eé]but)",
+      "\\b(short|reel|tiktok|vid[eé]o|script)\\b.{0,40}\\bhooks?\\b",
+      "(fais|propose|trouve|refais).{0,15}\\b(le |un |des )?(meilleur )?hooks?\\b",
+      "accroche",
+      "3 premi[eè]res secondes",
+      "arr[eê]ter le pouce",
+      "(les gens|ils|elles|on) swip",
+      "r[eé]tention du d[eé]but",
+      "d[eé]but de la vid[eé]o",
+      "premi[eè]re (image|phrase|seconde|frame)",
+      "son d'ouverture",
+      "d[eé]but (est )?mou"
     ]
   },
   "android-device-control": {
@@ -447,14 +439,6 @@
       "lecteur sur mon t[ée]l[ée]phone"
     ]
   },
-  "anti-bot-web-reading": {
-    "chemin": "~/.hermes/skills/research/anti-bot-web-reading/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "anti-?bot",
-      "lire (une page |un site )?ebay"
-    ]
-  },
   "audiotruth-banc": {
     "chemin": "~/.hermes/skills/research/audiotruth-banc/SKILL.md",
     "forcer": false,
@@ -462,16 +446,6 @@
       "audiotruth.{0,30}(banc|score|scorer|d[ée]tect)",
       "banc audiotruth",
       "d[ée]tecteurs? de voix"
-    ]
-  },
-  "bilan-stats": {
-    "chemin": "~/.agents/skills/bilan-stats/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "rel[èe]ve les stats",
-      "bilan de la semaine",
-      "quel format marche",
-      "combien de vues"
     ]
   },
   "bitcoin-address-datasets": {
@@ -502,23 +476,6 @@
       "co[ûu]ts? cloud"
     ]
   },
-  "codex-hermes": {
-    "chemin": "~/.hermes/skills/autonomous-ai-agents/codex-hermes/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "codex cli",
-      "d[ée]l[èe]gue (à |a )?codex",
-      "lance codex"
-    ]
-  },
-  "crawl4ai-scraper": {
-    "chemin": "~/.claude/skills/crawl4ai-scraper/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "crawl4ai",
-      "scraper (un |ce |le )?site"
-    ]
-  },
   "deal-hunting-phone": {
     "chemin": "~/.claude/skills/deal-hunting-phone/SKILL.md",
     "forcer": false,
@@ -526,25 +483,6 @@
       "pixel (9|10) pro.{0,40}(prix|deal|bon plan|pas cher|\\bus\\b)",
       "veille prix",
       "deals?.{0,10}pixel"
-    ]
-  },
-  "direction-voix": {
-    "chemin": "~/.agents/skills/direction-voix/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "dirige la voix",
-      "feuille de direction",
-      "elle lit au lieu de raconter",
-      "direction de voix"
-    ]
-  },
-  "encaissement-vendeur-amazon": {
-    "chemin": "~/.hermes/skills/commerce/encaissement-vendeur-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "worldfirst",
-      "compte de versement amazon",
-      "payouts? amazon"
     ]
   },
   "forget": {
@@ -557,115 +495,11 @@
       "efface ce qu'on a fait"
     ]
   },
-  "groq-whisperer": {
-    "chemin": "~/.hermes/skills/mlops-models/groq-whisperer/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "transcris (cet|ce|l[ae]|mon) (audio|vocal|enregistrement|fichier audio)",
-      "(mets|passe) (ce|le|mon) vocal en texte",
-      "\\bgroq\\b.{0,30}\\bwhisper\\b|\\bwhisper\\b.{0,30}\\bgroq\\b"
-    ]
-  },
-  "browser-powered-social-media": {
-    "chemin": "~/.hermes/skills/autonomous-ai-agents/browser-powered-social-media/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "poste sur x\\b",
-      "poste (un tweet|sur twitter)",
-      "automatise (twitter|x\\b|les r[ée]seaux sociaux)",
-      "cookies de session"
-    ]
-  },
-  "hermes-instance-cloisonnee": {
-    "chemin": "~/.claude/skills/devops/hermes-instance-cloisonnee/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "instance hermes",
-      "instance cloisonn[ée]e",
-      "hermes cloisonn"
-    ]
-  },
-  "hermes-kit": {
-    "chemin": "~/.hermes/skills/devops/hermes-kit/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "topxl.{0,30}hermes[- ]kit",
-      "(publie|push|pousse|modifie|mets? [àa] jour).{0,25}hermes[- ]kit",
-      "hermes[- ]kit.{0,25}(d[ée]p[ôo]t|github|publi)"
-    ]
-  },
-  "hermes-llm-router": {
-    "chemin": "~/.hermes/skills/devops/hermes-llm-router/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "routeur llm",
-      "changer de mod[èe]le hermes",
-      "\\b8010\\b"
-    ]
-  },
-  "hermes-telegram-topics": {
-    "chemin": "~/.claude/skills/hermes-telegram-topics/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "topic muet",
-      "(cr[ée]e|renomme|re-?route|fais taire).{0,20}topic",
-      "d[ée]boublonner.{0,20}topic"
-    ]
-  },
-  "montage-short": {
-    "chemin": "~/.agents/skills/montage-short/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "monte ce short",
-      "monte v\\d\\d",
-      "mes rushes",
-      "rushes? bruts?"
-    ]
-  },
-  "opencli-browser-poste": {
-    "chemin": "~/.claude/skills/opencli-browser-poste/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "ma page (ouverte|internet)",
-      "l'onglet o[ùu] je suis",
-      "la fen[êe]tre ouverte",
-      "page internet qui est ouverte"
-    ]
-  },
   "parallel-scan-optimization": {
     "chemin": "~/.claude/skills/parallel-scan-optimization/SKILL.md",
     "forcer": false,
     "motifs": [
       "scans? parall[èe]les?"
-    ]
-  },
-  "projet-a-seo": {
-    "chemin": "~/.hermes/skills/commerce/projet-a-seo/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "projet-a.{0,40}seo|seo.{0,40}projet-a",
-      "search console"
-    ]
-  },
-  "plan-contenu": {
-    "chemin": "~/.agents/skills/plan-contenu/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "plan de contenu",
-      "plan de publication",
-      "calendrier [ée]ditorial",
-      "planifie mes shorts",
-      "qu'est-ce que je publie"
-    ]
-  },
-  "prime-agent": {
-    "chemin": "~/.claude/skills/prime-agent/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "prime agent",
-      "agents? prime",
-      "vj_prime_agent_bot",
-      "thread 11025"
     ]
   },
   "r": {
@@ -677,26 +511,6 @@
       "^(\\[vin\\] )?/r\\b"
     ]
   },
-  "realisation-short": {
-    "chemin": "~/.agents/skills/realisation-short/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "la cam[ée]ra est plate",
-      "pas assez dynamique",
-      "plus d'effets",
-      "coups? de cam[ée]ra"
-    ]
-  },
-  "recherche-profonde": {
-    "chemin": "~/.hermes/skills/research/recherche-profonde/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "cherche vraiment",
-      "\\bcreuse\\b",
-      "paywall",
-      "forum ferm[ée]"
-    ]
-  },
   "reconnaissance-reseau": {
     "chemin": "~/.hermes/skills/security/reconnaissance-reseau/SKILL.md",
     "forcer": false,
@@ -705,15 +519,6 @@
       "scanne (le |mon )?r[ée]seau",
       "appareils? (sur|du) (mon )?(r[ée]seau|wifi)",
       "\\bnmap\\b"
-    ]
-  },
-  "reddit-monitor": {
-    "chemin": "~/.hermes/skills/automation/reddit-monitor/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "reddit-monitor",
-      "surveill\\w+ (les )?subreddits?",
-      "subreddits?.{0,40}(promotion|mots?-cl[ée]s)"
     ]
   },
   "referencement-enseigne-thailande": {
@@ -736,137 +541,12 @@
       "r[ée]trospective de l'agent"
     ]
   },
-  "revente-marque-tierce-amazon": {
-    "chemin": "~/.hermes/skills/commerce/revente-marque-tierce-amazon/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "medisana",
-      "marque tierce",
-      "stock de cette marque",
-      "revendre en europe",
-      "demande d'autorisation.{0,30}(marque|amazon)"
-    ]
-  },
-  "scenario-short": {
-    "chemin": "~/.agents/skills/scenario-short/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "raconte mieux",
-      "comme alfred",
-      "fa[cç]on alfred",
-      "alfred\\.explique",
-      "l'histoire est nulle",
-      "storyboard anim[ée]",
-      "shotbook"
-    ]
-  },
-  "script-short": {
-    "chemin": "~/.agents/skills/script-short/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "[ée]cris un script",
-      "script de (short|reel)",
-      "id[ée]e de vid[ée]o farang",
-      "note ce script",
-      "r[ée]{1,2}cris ce script"
-    ]
-  },
-  "seduction-bond": {
-    "chemin": "~/.hermes/skills/relations/seduction-bond/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "aborder une (fille|femme)",
-      "s[ée]duction",
-      "seduction-bond"
-    ]
-  },
-  "seo-pilote": {
-    "chemin": "~/.claude/skills/seo-pilote/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "lance le seo",
-      "audit seo complet",
-      "analyse le seo",
-      "actionne les leviers seo",
-      "o[ùu] en est le seo"
-    ]
-  },
-  "short-anime": {
-    "chemin": "~/.agents/skills/short-anime/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "short anim[ée]",
-      "anime ce script",
-      "vin en cubes",
-      "version voxel",
-      "univers minecraft",
-      "refais v0\\d"
-    ]
-  },
-  "style-pate-a-modeler": {
-    "chemin": "~/.agents/skills/style-pate-a-modeler/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "p[âa]te [àa] modeler",
-      "claymation",
-      "stop-?motion",
-      "planches? de caract[èe]re"
-    ]
-  },
-  "sujets-qui-marchent": {
-    "chemin": "~/.agents/skills/sujets-qui-marchent/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "trouve des sujets",
-      "de quoi (je pourrais |je devrais |on pourrait )?parler",
-      "id[ée]es de vid[ée]os",
-      "n'int[ée]resse personne",
-      "change de sujet"
-    ]
-  },
-  "systemd-service-operations": {
-    "chemin": "~/.hermes/skills/devops/systemd-service-operations/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "unit[ée]s? systemd",
-      "timers? systemd",
-      "service systemd"
-    ]
-  },
-  "tarifs-douane-usa": {
-    "chemin": "~/.hermes/skills/commerce/tarifs-douane-usa/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "droits? de douane",
-      "tarifs? douaniers?",
-      "douane (am[ée]ricaine|us|usa)\\b",
-      "\\btariffs?\\b"
-    ]
-  },
   "tinder-agent": {
     "chemin": "~/.claude/skills/tinder-agent/SKILL.md",
     "forcer": false,
     "motifs": [
       "(swipe|automatis|agent|recorder|rejou).{0,40}tinder",
       "tinder.{0,40}(swipe|automatis|agent|recorder|rejou)"
-    ]
-  },
-  "update-all-skills": {
-    "chemin": "~/.claude/skills/update-all-skills/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "mets? [àa] jour (mes |toutes les )?skills",
-      "update all skills",
-      "update everything",
-      "tout mettre [àa] jour.{0,20}skills?"
-    ]
-  },
-  "usage-quota-monitoring": {
-    "chemin": "~/.hermes/skills/productivity/usage-quota-monitoring/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "surveill\\w+ les quotas",
-      "quota (claude|codex|openrouter|api)"
     ]
   },
   "video-transcription": {
@@ -878,25 +558,6 @@
       "qu'est-ce qu'il dit",
       "instagram\\.com/reel",
       "tiktok\\.com/"
-    ]
-  },
-  "voice-pipeline-config": {
-    "chemin": "~/.hermes/skills/media/voice-pipeline-config/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "pipeline (vocal|voix)",
-      "\\bstt\\b.{0,30}\\btts\\b"
-    ]
-  },
-  "voix-narration": {
-    "chemin": "~/.agents/skills/voix-narration/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "voix off",
-      "fais la voix",
-      "style eleven ?lab",
-      "g[ée]n[èe]re la voix",
-      "rends la voix moins plate"
     ]
   },
   "wallet-entropy-audit": {
@@ -917,41 +578,109 @@
       "\\by a[- ]t[- ]il\\b.{0,10}\\bskills? pour\\b"
     ]
   },
-  "accroche-short": {
-    "chemin": "~/.claude/skills/accroche-short/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "\\bhooks?\\b.{0,40}\\b(short|reel|tiktok|vid[eé]o|script|d[eé]but)",
-      "\\b(short|reel|tiktok|vid[eé]o|script)\\b.{0,40}\\bhooks?\\b",
-      "(fais|propose|trouve|refais).{0,15}\\b(le |un |des )?(meilleur )?hooks?\\b",
-      "accroche",
-      "3 premi[eè]res secondes",
-      "arr[eê]ter le pouce",
-      "(les gens|ils|elles|on) swip",
-      "r[eé]tention du d[eé]but",
-      "d[eé]but de la vid[eé]o",
-      "premi[eè]re (image|phrase|seconde|frame)",
-      "son d'ouverture",
-      "d[eé]but (est )?mou"
-    ]
-  },
-  "mesure-partout": {
-    "chemin": "~/.claude/skills/mesure-partout/SKILL.md",
-    "forcer": false,
-    "motifs": [
-      "\\bnon mesur[ée]e?s?\\b",
-      "\\b(co[uû]ts?|conso(mmation)?)\\b.{0,40}\\b(pas|non) mesur",
-      "\\bmesur(e|er) (tout|partout)\\b",
-      "\\btout traquer\\b",
-      "\\bmesure-partout\\b",
-      "\\bcontrole-mesure\\b"
-    ]
-  },
   "marque-handsfold": {
     "chemin": "~/.claude/skills/marque-handsfold/SKILL.md",
     "forcer": false,
     "motifs": [
       "\\b(logo|favicon|og\\.jpg|bandeau|couleurs? de (la )?marque)\\b.{0,60}\\b(handsfold|club|farang ?vin|site)\\b|\\b(handsfold|club)\\b.{0,60}\\b(logo|favicon|wai)\\b"
+    ]
+  },
+  "donnees-defi-onchain": {
+    "chemin": "~/.claude/skills/donnees-defi-onchain/SKILL.md",
+    "forcer": false,
+    "motifs": [
+      "defillama",
+      "etherscan",
+      "contrats? v[ée]rifi[ée]s?",
+      "chaindata",
+      "protocoles? .{0,20}cha[iî]nes?",
+      "hacks? (crypto|defi)"
+    ]
+  },
+  "amazon": {
+    "chemin": "~/.claude/skills/amazon/SKILL.md",
+    "forcer": false,
+    "motifs": [
+      "fiche produit amazon",
+      "valide ce produit",
+      "analyse ce candidat",
+      "compare les finalistes",
+      "lequel choisir",
+      "produit candidat",
+      "avatars? d.acheteurs?",
+      "trouve.{0,20}(fournisseurs?|usines?)",
+      "\\bsourcing\\b",
+      "\\b1688\\b",
+      "\\balibaba\\b",
+      "(n[ée]gocier|parler?|relancer?|devis).{0,25}\\b(l.)?usine\\b",
+      "qui peut (le |la |les )?fabriquer",
+      "\\b[ée]chantillons?\\b.{0,40}(usine|fournisseur|1688|alibaba)",
+      "command\\w*.{0,20}\\b[ée]chantillons?\\b",
+      "leader.{0,20}pays",
+      "combien d.avis a le n.?1",
+      "unit[ée]s par mois",
+      "cross.?market",
+      "[ée]tude de march[ée]",
+      "quel livre publier",
+      "\\bkdp\\b.{0,40}(niche|livre|publier|march[ée]|vend)",
+      "quelle niche",
+      "audit de niche",
+      "est-ce qu.on peut rentrer",
+      "vrai produit gagnant",
+      "valide.{0,20}niche",
+      "\\busines?\\b.{0,40}(chin|1688|alibaba|made.in.china)|(chin|1688|alibaba).{0,40}\\busines?\\b",
+      "(demander|demande) (des |un )?devis",
+      "usine ou n[ée]goce",
+      "captcha.{0,30}(1688|alibaba)",
+      "(1688|alibaba).{0,40}(captcha|bloqu|slider|v[ée]rif)",
+      "0 captcha",
+      "worldfirst",
+      "compte de versement amazon",
+      "payouts? amazon",
+      "medisana",
+      "marque tierce",
+      "stock de cette marque",
+      "revendre en europe",
+      "demande d'autorisation.{0,30}(marque|amazon)",
+      "droits? de douane",
+      "tarifs? douaniers?",
+      "douane (am[ée]ricaine|us|usa)\\b",
+      "\\btariffs?\\b",
+      "produits? gagnants?",
+      "se positionner sur (ce|le|un|cette|la) (produit|niche)"
+    ]
+  },
+  "marketing": {
+    "chemin": "~/.claude/skills/marketing/SKILL.md",
+    "forcer": false,
+    "motifs": [
+      "mots?[- ]cl[ée]s",
+      "(?<!for )\\bseo\\b",
+      "(?<!compte )(?<!facture )data ?for ?seo",
+      "google trends",
+      "slogan",
+      "donne envie d'acheter",
+      "accroches? (de |d'une |pour (la |une )?)?(pub|fiche|marque-e|projet-a|titre)",
+      "projet-a.{0,40}seo|seo.{0,40}projet-a",
+      "search console",
+      "lance le seo",
+      "audit seo complet",
+      "analyse le seo",
+      "actionne les leviers seo",
+      "o[ùu] en est le seo",
+      "reddit-monitor",
+      "surveill\\w+ (les )?subreddits?",
+      "subreddits?.{0,40}(promotion|mots?-cl[ée]s)",
+      "panels? smm",
+      "ach[eè]t\\w* (\\d+ )?(des )?(followers|abonn[ée]s|likes|vues)",
+      "\\bsmm\\b",
+      "poste sur x\\b",
+      "poste (un tweet|sur twitter)",
+      "automatise (twitter|x\\b|les r[ée]seaux sociaux)",
+      "cookies de session",
+      "google ads",
+      "pixel (de conversion|meta|tiktok)",
+      "campagne (de )?pub"
     ]
   }
 }

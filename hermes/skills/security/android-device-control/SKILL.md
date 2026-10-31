@@ -3,6 +3,7 @@ name: android-device-control
 description: >-
   Root, OS custom, banques : config Pixel pour liberté max.
 version: 1.0.0
+disable-model-invocation: true
 ---
 
 # Android Device Control : liberté max + compatibilité bancaire

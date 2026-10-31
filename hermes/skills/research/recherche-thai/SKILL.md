@@ -1,7 +1,7 @@
 ---
 name: recherche-thai
 description: "Web thaïlandais en thaï : prix, normes, douane, lois. Cherche sur le web thaïlandais, en thaï, pour obtenir les vrais chiffres au lieu des pages pour expatriés. Fournit le lexique thaï, les sites qui font autorité et les pièges (ère bouddhiste, unités). La recherche passe ensuite par agent-reach-hermes. À charger dès qu'une question sur la Thaïlande touche un prix, un taux, une loi, une douane, une banque, un terrain, une société ou une démarche, même posée en français."
-when_to_use: "USER demande « combien ça coûte en Thaïlande », « la douane thaïe prend combien », « le taux de prêt », « le prix du terrain », « c'est légal en Thaïlande ? », « comment ouvrir une société thaïe », « quel visa », « le FDA thaï ». Pas pour la douane des États-Unis (voir tarifs-douane-usa)."
+when_to_use: "USER demande « combien ça coûte en Thaïlande », « la douane thaïe prend combien », « le taux de prêt », « le prix du terrain », « c'est légal en Thaïlande ? », « comment ouvrir une société thaïe », « quel visa », « le FDA thaï ». Pas pour la douane des États-Unis (voir amazon)."
 version: 1.0.0
 metadata:
   hermes:

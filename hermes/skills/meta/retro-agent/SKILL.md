@@ -7,6 +7,7 @@ metadata:
   hermes:
     tags: [meta, qualite, retrospective, auto-amelioration]
     related_skills: [verifier-avant-livraison, r]
+disable-model-invocation: true
 ---
 
 # Rétro agent : apprendre de ses propres sessions
@@ -168,8 +169,8 @@ que la présente section corrige.
    à chercher » → « l'agent n'a qu'un canal de recherche ». « L'agent devine
    l'état d'un service » → « l'agent n'a pas de sonde ». « USER doit rappeler
    le contexte » → « l'agent n'a pas de mémoire de projet ».
-3. **Chercher l'outil qui existe déjà dehors.** Utiliser `recherche` et
-   `agent-reach-hermes` : ce manque est presque toujours résolu par un CLI, un MCP,
+3. **Chercher l'outil qui existe déjà dehors.** Utiliser la skill `recherche` (guide
+   agent-reach-hermes) : ce manque est presque toujours résolu par un CLI, un MCP,
    une API ou une skill publique. Ne pas concevoir avant d'avoir cherché.
 4. **Estimer la démultiplication.** Un levier valide n'améliore pas une tâche :
    il ouvre une classe de tâches. Si le gain se chiffre en « un peu mieux »,
