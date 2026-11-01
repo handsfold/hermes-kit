@@ -38,6 +38,17 @@ mkdir -p "$CACHE"
 exec 9>"${PIXEL_TMP:-/tmp}/qg-prevoix-$ID.lock"
 flock -n 9 || exit 0
 
+# Les boutons devines pour ce rapport, d'apres le profil de USER : <id>.choix et
+# <id>.libelles, que rapport.sh passe au telephone a l'ecoute. Ils partent ICI,
+# avant le resume vocal (2026-10-28) : le prompt des boutons recoit deja le
+# rapport entier, il n'a pas besoin du resume. Lances apres lui, ils finissaient
+# 3 a 4 s apres le mp3 et le rapport partait avec Detail seul (5474, 5480,
+# 5487). Un echec laisse Oui Non Detail, le filet de rapport.sh fait le reste.
+STANDARD="$(dirname "$(readlink -f "$0")")/../qg/qg-standard.py"
+timeout 60 python3 "$STANDARD" rapport "$ID" </dev/null >/dev/null \
+  2>>"$HOME/.hermes/logs/qg-standard.log" &
+P3=$!
+
 # « voix » et pas « texte » : le markdown est retire, sinon la synthese recite
 # les asterisques du gras, une par une, a chaque rapport.
 TXT="$("$FILE" voix "$ID" 2>/dev/null || true)"
@@ -59,13 +70,6 @@ edge-tts --voice "$VOIX" --rate="$DEBIT" --text "$DIT" \
 P1=$!
 printf '%s' "$DIT" | "$VOIX_TG" "$TMP/r.ogg" 2>/dev/null &
 P2=$!
-# Et les boutons devines pour ce rapport, d'apres le profil de USER : <id>.choix
-# et <id>.libelles, que rapport.sh passe au telephone a l'ecoute. Un echec
-# laisse Oui Non Detail, rien ne l'attend.
-STANDARD="$(dirname "$(readlink -f "$0")")/../qg/qg-standard.py"
-printf '%s' "$TXT" | timeout 60 python3 "$STANDARD" rapport "$ID" >/dev/null \
-  2>>"$HOME/.hermes/logs/qg-standard.log" &
-P3=$!
 wait "$P2" || exit 0
 wait "$P1" || exit 0
 [ -s "$TMP/r.mp3" ] && [ -s "$TMP/r.ogg" ] || exit 0

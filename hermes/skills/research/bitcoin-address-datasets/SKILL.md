@@ -1,6 +1,7 @@
 ---
 name: bitcoin-address-datasets
 description: Dumps Bitcoin (LoyceV) pour scan local sans réseau.
+disable-model-invocation: true
 ---
 
 Sommaire :

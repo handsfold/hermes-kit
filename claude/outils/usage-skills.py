@@ -48,6 +48,40 @@ NOM_SKILL = re.compile(rb"[A-Za-z0-9_.-]+$")
 # Mise en service de l'aiguilleur (Hermes et hook aiguilleur-cc.py, 2026-10-25 a 4 h) : avant, 21 des 27 rates.
 AIGUILLEUR = datetime(2026, 10, 25, 4, 5).timestamp()
 SKILL_JSON = re.compile(rb'"skill": ?"([^"]+)"')
+# Skills fusionnees : l'ancien nom compte pour la nouvelle skill (methodes/fusion-skills.md).
+FUSIONS = {n: "amazon" for n in (
+    "fiche-produit-amazon", "fournisseurs-amazon", "etude-leaders-amazon", "etude-marche-amazon",
+    "audit-niche-amazon", "sourcing-usines-chine", "acces-sites-fournisseurs-chine",
+    "ouverture-pays-amazon", "encaissement-vendeur-amazon", "revente-marque-tierce-amazon",
+    "tarifs-douane-usa")}
+FUSIONS.update({n: "marketing" for n in (
+    "etude-marketing", "pub-payante-pixels", "projet-a-seo", "seo-pilote", "reddit-monitor",
+    "achat-engagement-smm", "browser-powered-social-media")})
+FUSIONS.update({n: "recherche" for n in (
+    "recherche-thai", "recherche-fraiche", "fait-manquant", "recherche-profonde",
+    "agent-reach-hermes", "crawl4ai-scraper")})
+FUSIONS.update({n: "messages" for n in (
+    "mail-redaction", "negociation-creance", "signer-document", "seduction-bond")})
+FUSIONS.update({n: "atelier" for n in (
+    "fabrique-skill", "hermes-llm-router", "prime-agent",
+    "hermes-telegram-topics", "mesure-partout", "hermes-kit",
+    "update-all-skills", "hermes-instance-cloisonnee", "codex-hermes",
+    "groq-whisperer", "voice-pipeline-config", "systemd-service-operations",
+    "usage-quota-monitoring")})
+FUSIONS.update({n: "construire" for n in (
+    "charte-ux", "verifier-avant-livraison", "nouveau-projet")})
+FUSIONS.update({n: "navigateur" for n in (
+    "captcha-relais", "coffre-identifiants", "opencli-browser-poste", "pc-entreprise-a",
+    "pixel-pilotage", "gmail-envoi-en-tant-que", "google-agenda-chrome",
+    "anti-bot-web-reading")})
+FUSIONS.update({n: "entreprise-a" for n in (
+    "entreprise-a-index", "entreprise-a-analyse-distributeurs", "tiktok-shop-seller",
+    "watsons-supplier-portal", "eve-and-boy-vendor-center")})
+FUSIONS.update({n: "short" for n in (
+    "accroche-short", "style-pate-a-modeler", "montage-short", "scenario-short",
+    "realisation-short", "direction-voix", "script-short", "voix-narration",
+    "sujets-qui-marchent", "short-anime", "plan-contenu", "analyse-video",
+    "bilan-stats")})
 
 
 def skills_chargees(brut):
@@ -58,13 +92,13 @@ def skills_chargees(brut):
     while i != -1:
         m = NOM_SKILL.search(brut, max(0, i - 80), i)
         if m:
-            noms.add(m.group().decode(errors="replace"))
+            noms.add(FUSIONS.get(m.group().decode(errors="replace"), m.group().decode(errors="replace")))
         i = brut.find(b"/SKILL.md", i + 9)
     i = brut.find(b'"skill":')
     while i != -1:
         m = SKILL_JSON.match(brut, i)
         if m:
-            noms.add(m.group(1).decode(errors="replace"))
+            noms.add(FUSIONS.get(m.group(1).decode(errors="replace"), m.group(1).decode(errors="replace")))
         i = brut.find(b'"skill":', i + 8)
     return noms
 
@@ -301,7 +335,7 @@ def main():
                                     if len(exemples[n]) < 400:
                                         exemples[n].append((sess, exemple(t, m)))
                                     break
-            injectees = {m.decode(errors="replace") for m in INJECTEE.findall(brut)}
+            injectees = {FUSIONS.get(m.decode(errors="replace"), m.decode(errors="replace")) for m in INJECTEE.findall(brut)}
             hermes = hors and (b'"content":"[Vin]' in brut or b'"text":"[Vin]' in brut or injectees)
             if hermes:
                 h_sess.add(sess)
@@ -318,6 +352,7 @@ def main():
                     continue
                 for b in blocs_outils(ligne):
                     n = nom_depuis(b)
+                    n = FUSIONS.get(n, n)
                     if n:
                         compte[n] += 1
                         sessions[n].add(f.stem)

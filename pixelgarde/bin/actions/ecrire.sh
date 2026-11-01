@@ -16,7 +16,7 @@ Q="${ECRIRE_TEXTE:-}"
 # Mode (2.48) : question | repondre | resumer. Un mode sans consigne de USER est
 # permis (« Repondre » d'un toucher) ; seul « question » exige un texte.
 MODE="${ECRIRE_MODE:-question}"
-case "$MODE" in question|repondre|resumer|traduire) ;; *) MODE=question ;; esac
+case "$MODE" in question|repondre|resumer|traduire|seduire) ;; *) MODE=question ;; esac
 CONV="${ECRIRE_CONV:-}"
 [ -n "$Q" ] || [ "$MODE" != question ] || exit 1
 TMP="$(mktemp -d)"; trap 'rm -rf "${TMP:?}"' EXIT
@@ -85,7 +85,7 @@ except Exception:
 out, vus, pkgs = [], set(), []
 # Modes « repondre » et « resumer » : chaque ligne porte le cote de sa bulle.
 # C'est ce qui dit qui parle (a droite = USER, a gauche = l'autre).
-cote = len(sys.argv) > 2 and sys.argv[2] in ("repondre", "resumer")
+cote = len(sys.argv) > 2 and sys.argv[2] in ("repondre", "resumer", "seduire")
 
 
 def bornes(n):
@@ -152,7 +152,7 @@ echo "ecrire : $(wc -c < "$TMP/ecran.cut") octets d'ecran" >&2
 # Carte d'identite precoce (2.57) : qui est la personne a l'ecran, lu en 1 s,
 # avant le modele. Le panneau bascule dans SA conversation pendant l'attente.
 CIBLE=""
-if [ "$MODE" = repondre ] || [ "$MODE" = resumer ]; then
+if [ "$MODE" = repondre ] || [ "$MODE" = resumer ] || [ "$MODE" = seduire ]; then
   python3 "$ICI/../personnes.py" carte "$TMP/ecran.cut" "$CONV" > "$TMP/carte.json" 2>/dev/null
   if [ -s "$TMP/carte.json" ]; then
     adb -s "$ADDR" push "$TMP/carte.json" "$TEL/ecrire-carte.json" >/dev/null 2>&1
@@ -182,12 +182,16 @@ cp "$TMP/ecran.cut" "$PIXEL_TMP/pixel-ecran-ctx.txt"
 # ne se lit pas a haute voix.
 FICHE="$ICI/../../qg/modes/$MODE.md"
 [ -f "$FICHE" ] || FICHE="$ICI/../../qg/modes/question.md"
+# Modele du mode (ligne « modele: » du fichier, 2.62) : le panneau Ecrire n'a pas
+# a suivre le modele vocal standard. Un mode sans ligne garde le standard.
+MODELE_FICHE="$(sed -n 's/^modele:[[:space:]]*//p' "$FICHE" | head -1)"
+[ -n "$MODELE_FICHE" ] && export QG_STANDARD_MODELE="$MODELE_FICHE"
 HIST="$HOME/.hermes/pixel-ecrire/$CONV.jsonl"
 [ -n "$CIBLE" ] && [ -s "$HOME/.hermes/pixel-ecrire/$CIBLE.jsonl" ] && HIST="$HOME/.hermes/pixel-ecrire/$CIBLE.jsonl"
 {
-  grep -v '^muet:' "$FICHE"
+  grep -v -e '^muet:' -e '^modele:' "$FICHE"
   printf '\nMoment present (heure de Thailande) : %s. Tiens-en compte : un « bonne soiree » a 1 h du matin sonne faux.\n' "$(TZ=Asia/Bangkok date '+%A %d/%m %H:%M')"
-  if [ "$MODE" = repondre ]; then
+  if [ "$MODE" = repondre ] || [ "$MODE" = seduire ]; then
     # Memoire des personnes (2.49) : dossier de la personne, tous reseaux.
     python3 "$ICI/../personnes.py" contexte "$TMP/ecran.cut" 2>/dev/null
   fi
@@ -210,6 +214,7 @@ grep -q '^muet: oui' "$FICHE" && MUET=1
 
 case "$MODE" in
   repondre) DIT="Écris ma réponse au message affiché${Q:+ : $Q}" ;;
+  seduire)  DIT="Écris le message qui la fait basculer${Q:+ (consigne : $Q)}" ;;
   resumer)  DIT="Résume l'écran${Q:+ (consigne : $Q)}" ;;
   *)        DIT="$Q" ;;
 esac
