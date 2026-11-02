@@ -27,7 +27,7 @@ cas REFUS Bash 'mkdir zz-neuf-test' "$P/perso/outils"
 cas REFUS Bash 'git clone https://github.com/a/b.git ~/Bureau/Projets/perso/outils/zz-neuf-test'
 cas REFUS Bash 'echo x > $HOME/Bureau/Projets/perso/vie/zz-neuf-test/a.txt'
 # Ce qui doit passer
-cas PASSE Bash 'bash ~/.claude/skills/nouveau-projet/scaffold.sh ~/Bureau/Projets/business/sites/zz-neuf-test js-web'
+cas PASSE Bash 'bash ~/.claude/skills/construire/nouveau-projet/scaffold.sh ~/Bureau/Projets/business/sites/zz-neuf-test js-web'
 cas PASSE Bash 'SANS_SOCLE=1 mkdir -p ~/Bureau/Projets/business/sites/zz-neuf-test'
 cas PASSE Write "$P/business/sites/realvoxai/public/neuf.html"
 cas PASSE Bash 'mkdir -p ~/Bureau/Projets/business/sites/realvoxai/zz-dossier'

@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="com.poste.pixelgarde"
-    android:versionCode="49" android:versionName="2.35">
+    android:versionCode="50" android:versionName="2.36">
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Le relais reseau (Relais.java, 2026-10-03) : la bulle sans ADB. -->
@@ -81,6 +81,18 @@
         <action android:name="com.poste.pixel.VOIXTAIRE" />
         <action android:name="com.poste.pixel.VOIXPAUSE" />
         <action android:name="com.poste.pixel.VOIXREJOUER" />
+      </intent-filter>
+    </service>
+    <!-- La conversation directe (2026-11-03), full-duplex par WebSocket vers
+         relais/creeper-live.py. Voir Direct.java. Meme regle que .Voix :
+         ouverte par adb (`am start-foreground-service`, actions/direct.sh du
+         garde), fermee par la bulle ou par DIRECTFIN. -->
+    <service android:name=".Direct"
+             android:exported="true"
+             android:foregroundServiceType="microphone|mediaPlayback">
+      <intent-filter>
+        <action android:name="com.poste.pixel.DIRECT" />
+        <action android:name="com.poste.pixel.DIRECTFIN" />
       </intent-filter>
     </service>
     <!-- Lecture a voix haute par le moteur du telephone, pilotee depuis la
