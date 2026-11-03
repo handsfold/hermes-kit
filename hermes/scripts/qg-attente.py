@@ -252,7 +252,118 @@ def sujets(rows):
     return vus
 
 
-def condenser(brut):
+OVERRIDES = os.path.expanduser("~/.hermes/gateway_model_overrides.json")
+JOURNAL_MODELE = os.path.expanduser("~/.hermes/qg-dispatch.log")
+
+
+def modele_du_topic(cible):
+    """Le modele effectif du thread d'une cible « telegram:<chat>:<thread> ».
+
+    Un override du gateway gagne sur le defaut de config.yaml. Rend un dict
+    {model, provider, api_key, base_url, api_mode} ou None si le thread n'a
+    pas d'override (ou cible inconnue) : l'appelant garde alors son modele
+    habituel. La cle d'API n'est jamais ecrite ni journalisee.
+    """
+    p = (cible or "").split(":")
+    if len(p) < 3 or p[0] != "telegram":
+        return None
+    try:
+        d = json.load(open(OVERRIDES, encoding="utf-8")) or {}
+    except Exception:
+        return None
+    v = d.get("agent:main:telegram:group:{}:{}".format(p[1], p[2]))
+    if isinstance(v, dict) and v.get("model"):
+        return v
+    return None
+
+
+def _trace_modele(quoi, modele, voie):
+    """Une ligne dans le journal du QG : quel modele a vraiment resume."""
+    try:
+        with open(JOURNAL_MODELE, "a", encoding="utf-8") as j:
+            j.write("{} condenser-{} modele={} voie={}\n".format(
+                time.strftime("%Y-%m-%d %H:%M:%S"), quoi, modele, voie))
+    except OSError:
+        pass
+
+
+def _appel_direct(ov, prompt):
+    """Appel HTTP au fournisseur d'un topic non Claude. None si echec."""
+    import urllib.request
+    base = (ov.get("base_url") or "").rstrip("/")
+    cle = ov.get("api_key") or os.environ.get("REFUSELESS_API_KEY") or ""
+    if not base or not cle:
+        return None
+    if ov.get("api_mode") == "anthropic_messages":
+        url = base + ("/messages" if base.endswith("/v1") else "/v1/messages")
+        corps = {"model": ov["model"], "max_tokens": 1500,
+                 "messages": [{"role": "user", "content": prompt}]}
+        ent = {"x-api-key": cle, "anthropic-version": "2023-06-01"}
+    else:
+        url = base + "/chat/completions"
+        corps = {"model": ov["model"], "max_tokens": 1500,
+                 "messages": [{"role": "user", "content": prompt}]}
+        ent = {"Authorization": "Bearer " + cle}
+    ent["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, json.dumps(corps).encode(), ent)
+    with urllib.request.urlopen(req, timeout=90) as f:
+        rep = json.loads(f.read().decode("utf-8"))
+    if "choices" in rep:
+        txt = rep["choices"][0]["message"].get("content") or ""
+    else:
+        txt = "".join(b.get("text", "") for b in rep.get("content", []))
+    # Les modeles de raisonnement laissent parfois leur bloc de pensee.
+    txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.S)
+    return txt.strip() or None
+
+
+def _claude_p(modele, prompt):
+    os.makedirs(NEUTRE, exist_ok=True)
+    r = subprocess.run(
+        ["claude", "-p", "--output-format", "json", "--model", modele,
+         "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
+         "--no-session-persistence"],
+        input=prompt, capture_output=True, text=True, timeout=90, cwd=NEUTRE)
+    if r.returncode != 0:
+        return None
+    return (json.loads(r.stdout).get("result") or "").strip() or None
+
+
+def generer(quoi, prompt, cible=None):
+    """Le texte condense, par le modele du topic, sinon par l'ancien chemin.
+
+    Topic Claude : `claude -p` sur ce modele. Topic non Claude : appel direct
+    a son fournisseur. Toute erreur ou reponse vide retombe sur le modele du
+    reglage (sonnet), jamais de silence. Jamais haiku.
+    """
+    ov = modele_du_topic(cible)
+    if ov:
+        nom = ov["model"]
+        try:
+            if nom.startswith("claude-"):
+                if "haiku" in nom:
+                    raise ValueError("haiku exclu")
+                txt = _claude_p(nom.split("@")[0], prompt)
+                voie = "claude-p"
+            else:
+                txt = _appel_direct(ov, prompt)
+                voie = "direct"
+            if txt:
+                _trace_modele(quoi, nom, voie)
+                return txt
+        except Exception:
+            pass
+        _trace_modele(quoi, reglage("modele"), "repli (topic: {})".format(nom))
+    else:
+        _trace_modele(quoi, reglage("modele"), "defaut")
+    try:
+        return _claude_p(reglage("modele"), prompt)
+    except Exception:
+        return None
+
+
+
+def condenser(brut, cible=None):
     """Le texte brut des rapports, ramene a un point oral de 3 phrases.
 
     Le digest recopiait mot pour mot la reponse du topic. USER recevait donc
@@ -261,21 +372,7 @@ def condenser(brut):
     un rapport. En cas d'echec on retombe sur le brut : mieux vaut un
     doublon qu'un silence.
     """
-    try:
-        os.makedirs(NEUTRE, exist_ok=True)
-        r = subprocess.run(
-            ["claude", "-p", "--output-format", "json",
-             "--model", reglage("modele"),
-             "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
-             "--no-session-persistence"],
-            input=GABARIT_DIGEST.format(brut=brut[:6000]),
-            capture_output=True, text=True, timeout=90, cwd=NEUTRE)
-        if r.returncode != 0:
-            return None
-        txt = (json.loads(r.stdout).get("result") or "").strip()
-        return txt or None
-    except Exception:
-        return None
+    return generer("digest", GABARIT_DIGEST.format(brut=brut[:6000]), cible)
 
 
 def cmd_digest():
@@ -300,7 +397,9 @@ def cmd_digest():
             " du sujet " + n if n else "", r["titre"],
             " ".join((r["resume"] or "").split())))
     brut = "\n\n".join(morceaux)
-    court = condenser(brut)
+    # Un seul topic dans le lot : son modele resume. Plusieurs : le defaut.
+    cibles = {r["cible"] for r in rows if r["cible"]}
+    court = condenser(brut, cibles.pop() if len(cibles) == 1 else None)
     if court:
         # Le modele glisse des tirets cadratins, proscrits partout chez USER.
         # Vu le 2026-08-28 dans un digest livre au QG.
@@ -554,7 +653,7 @@ Regles pour l'oreille :
 Rends uniquement ce texte."""
 
 
-def condenser_un(brut, question=""):
+def condenser_un(brut, question="", cible=None):
     """Un seul rapport, ramene a 20 secondes dites, qui finit sur une decision.
 
     Le 2026-10-02, USER a voulu que chaque rapport le fasse DECIDER, pas
@@ -568,23 +667,10 @@ def condenser_un(brut, question=""):
     l'ecoute supportable, le passage par sonnet. Il revient ici, pour un rapport
     au lieu de tous.
     """
-    try:
-        os.makedirs(NEUTRE, exist_ok=True)
-        r = subprocess.run(
-            ["claude", "-p", "--output-format", "json",
-             "--model", reglage("modele"),
-             "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
-             "--no-session-persistence"],
-            input=GABARIT_UN.format(
-                brut=brut[:6000],
-                question=("\nCe que USER avait demande : {}\n".format(question.strip())
-                          if question and question.strip() else "")),
-            capture_output=True, text=True, timeout=90, cwd=NEUTRE)
-        if r.returncode != 0:
-            return None
-        return (json.loads(r.stdout).get("result") or "").strip() or None
-    except Exception:
-        return None
+    return generer("un", GABARIT_UN.format(
+        brut=brut[:6000],
+        question=("\nCe que USER avait demande : {}\n".format(question.strip())
+                  if question and question.strip() else "")), cible)
 
 
 def pour_la_voix(txt):
@@ -631,7 +717,7 @@ def pour_la_voix(txt):
 def cmd_voix(ident):
     """Le texte d'un rapport, prepare pour la synthese vocale."""
     c = cx()
-    r = c.execute("select titre, resume, source from attente where id = ?",
+    r = c.execute("select titre, resume, source, cible from attente where id = ?",
                   (ident,)).fetchone()
     c.close()
     if not r:
@@ -659,7 +745,7 @@ def cmd_voix(ident):
             q = r["source"] or ""
             if q.startswith("Gateway message origin"):   # en-tete du hook, pas une demande
                 q = ""
-            court = condenser_un(brut, q)
+            court = condenser_un(brut, q, r["cible"])
             if court:
                 try:
                     os.makedirs(os.path.dirname(cache), exist_ok=True)
