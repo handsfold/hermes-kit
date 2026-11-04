@@ -725,6 +725,9 @@ public class Bulle {
     }
 
     private void rafraichir(String e, String menuBrut, String f) {
+        // Le garde rediffuse son etat toutes les 2 min : pendant une
+        // conversation directe, l'etat vient du service, pas de hote-1.
+        if (etatDirect != null && e != null && ("veille".equals(e) || e.startsWith("voix"))) e = etatDirect;
         boolean memeEtat = etat.equals(e);
         if (e != null && e.length() > 0) etat = e;
         if (f != null && f.length() > 0 && !f.equals(forme)) {
@@ -811,6 +814,9 @@ public class Bulle {
     private boolean morte(String id) {
         // Les tuiles de lecture se traitent sur le telephone : rien ne les tue.
         if (estLecture(id)) return false;
+        // La conversation directe se ferme sur le telephone : le bouton
+        // d'arret reste vivant meme lien coupe.
+        if ("direct".equals(id) && Direct.actif()) return false;
         // Lien coupe : exactement les memes boutons tombent qu'en pause, pour
         // exactement la meme raison. Ils ont besoin de la station.
         if (lienMuet) {
@@ -1636,6 +1642,13 @@ public class Bulle {
             envoyerIci();
             return;
         }
+        // Conversation directe : ouverte par le garde (le micro exige un
+        // demarrage par adb), fermee ici meme par le 2e appui.
+        if ("direct".equals(id)) {
+            fermer();
+            directIci();
+            return;
+        }
         // Un appui a l'interieur du sous-menu des vitesses n'en sort pas : USER
         // choisit un palier, l'entend, en veut un autre. Refermer la carte
         // l'obligeait a rouvrir la pastille puis a redescendre dans Vitesse a
@@ -2157,6 +2170,15 @@ public class Bulle {
         }
         if (!tuiles.isEmpty()) {
             carteVue.addView(rangeeTuiles(tuiles));
+            garni = true;
+            couper = true;
+        }
+        // La conversation directe ne vient pas de menu.txt : comme les tuiles
+        // de lecture, son libelle suit l'etat du service local.
+        if (retour == null) {
+            if (garni) carteVue.addView(separation());
+            carteVue.addView(ligne("direct", Langue.t(ctx, Direct.actif()
+                    ? R.string.bulle_menu_direct_fin : R.string.bulle_menu_direct)));
             garni = true;
             couper = true;
         }
@@ -2831,6 +2853,41 @@ public class Bulle {
         h.postDelayed(new Runnable() {
             public void run() { majMenu(); }
         }, 400);
+    }
+
+    /**
+     * Etat pose par la conversation directe (Direct.java), null hors
+     * conversation. Garde contre l'ecrasement par le battement du garde.
+     */
+    private static volatile String etatDirect = null;
+
+    /** Couloir statique Direct vers la pastille, comme lecture(). null = fin. */
+    static void direct(final String e) {
+        etatDirect = e;
+        final Bulle b = vivante;
+        if (b == null || b.pastille == null) return;
+        b.h.post(new Runnable() {
+            public void run() {
+                b.etat = e == null ? "veille" : e;
+                b.versCouleur();
+                if (b.ouvert && !b.glisse) b.majMenu();
+            }
+        });
+    }
+
+    private void directIci() {
+        try {
+            if (Direct.actif()) {
+                ctx.startService(new Intent(ctx, Direct.class).setAction(Direct.ARRETER));
+            } else {
+                commande(ctx, "direct");
+                vibrer(15);
+                etat = "voixtravaille";
+                versCouleur();
+            }
+        } catch (Exception e) {
+            Log.w("pixelgarde", "direct : appui " + e);
+        }
     }
 
     private boolean parlerIci() {

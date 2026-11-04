@@ -1,0 +1,11 @@
+{
+  "accroche": "Architecture de site : arborescence et maillage.",
+  "fait": "Organise les pages d'un site : arborescence, URLs, liens internes, silos thematiques.",
+  "pas_pour": "Pas pour les donnees structurees (voir schema).",
+  "quand": "USER dit « arborescence », « structure du site », « maillage ». Aussi quand un site s'agrandit ou se reorganise.",
+  "motifs": [
+    "architecture|arborescence|maillage"
+  ],
+  "origine_sha": "5e066da9034b14a0",
+  "date": "2026-11-04"
+}
