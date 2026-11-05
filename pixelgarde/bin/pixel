@@ -774,7 +774,8 @@ def c_shell(a):
 
 
 def c_clavier_install(a):
-    """Installe ADBKeyboard, indispensable pour taper des accents ou du thai."""
+    """INTERDIT par USER (2026-11-05) : ADBKeyboard bloque son clavier."""
+    sys.exit("Refus : USER ne veut plus d'ADBKeyboard (il bloque son clavier Gboard). Demander a USER.")
     url = ("https://github.com/senzhk/ADBKeyBoard/raw/master/ADBKeyboard.apk")
     dest = "/tmp/ADBKeyboard.apk"
     if not os.path.exists(dest):

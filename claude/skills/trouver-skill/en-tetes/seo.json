@@ -1,0 +1,11 @@
+{
+  "accroche": "SEO : principes de referencement appliques a un site.",
+  "fait": "Applique les principes SEO a un site : structure, contenu, signaux techniques, bonnes pratiques Google.",
+  "pas_pour": "Pas pour auditer un site existant point par point (voir seo-audit).",
+  "quand": "USER dit « SEO », « referencement », « optimise le site ». Aussi quand on travaille le classement Google de livaya.",
+  "motifs": [
+    "seo|referencement"
+  ],
+  "origine_sha": "014302a566c4f5f1",
+  "date": "2026-11-04"
+}

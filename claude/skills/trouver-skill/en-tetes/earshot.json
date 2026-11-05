@@ -1,0 +1,11 @@
+{
+  "accroche": "Écoute ce son, bruitage : les oreilles de Claude.",
+  "fait": "Donne des oreilles à l'agent : décrit un son, classe des bruitages, trouve le bon moment, vérifie le calage son et image d'une vidéo, note un film. Tourne en local sur processeur.",
+  "pas_pour": "Pas pour créer une voix (voir short), ni pour transcrire de la parole (voir atelier).",
+  "quand": "USER dit « écoute ce son », « le son tombe pile sur la coupe ? », « choisis un bruitage », « vérifie l'audio de ce Short ». Aussi avant de poser un bruitage ou une musique dans un montage.",
+  "motifs": [
+    "earshot|bruitage|\\bsfx\\b|calage (du )?son|écoute (ce|le) son"
+  ],
+  "origine_sha": "c0ee8f5ec0e66506",
+  "date": "2026-11-02"
+}

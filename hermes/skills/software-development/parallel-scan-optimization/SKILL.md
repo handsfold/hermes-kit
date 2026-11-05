@@ -1,6 +1,7 @@
 ---
 name: parallel-scan-optimization
 description: Scans paralleles massifs avec large dataset partage.
+disable-model-invocation: true
 ---
 
 Sommaire :
