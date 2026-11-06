@@ -502,7 +502,7 @@ def appeler(modele, systeme, historique, phrase):
         msgs.append({"role": "user", "content": h["poste"]})
         msgs.append({"role": "assistant", "content": h["moi"]})
     msgs.append({"role": "user", "content": phrase})
-    corps = json.dumps({"model": modele, "max_tokens": 700,
+    corps = json.dumps({"model": modele, "max_tokens": 900,
                         "system": systeme, "messages": msgs}).encode()
     req = urllib.request.Request(ROUTEUR, data=corps, headers={
         "content-type": "application/json", "x-api-key": "local",
@@ -521,6 +521,17 @@ def extraire(texte):
             return json.loads(m.group(0))
         except ValueError:
             pass
+    # JSON tronque (max_tokens atteint) : on recupere au moins le message,
+    # et le resume s'il est entier. Sinon le panneau affichait le JSON brut
+    # (vu le 2026-11-01 00:00). On cherche dans tout le texte : un JSON coupe
+    # en plein "nom" n'a plus d'accolade fermante.
+    md = re.search(r'"dire"\s*:\s*"((?:[^"\\]|\\.)*)', texte)
+    if md:
+        d = {"action": "repondre", "dire": json.loads('"' + md.group(1) + '"')}
+        mp = re.search(r'"resume"\s*:\s*"((?:[^"\\]|\\.)*)', texte)
+        if mp:
+            d["personne"] = {"resume": json.loads('"'+mp.group(1)+'"')}
+        return d
     # Le modele a parle au lieu de rendre du JSON : on dit ce qu'il a dit.
     return {"action": "repondre", "dire": texte[:400]}
 
@@ -783,14 +794,23 @@ def choix_rapport(ident):
     Le texte dit arrive sur l'entree standard. Sortie : <id>.choix (la ligne
     pour le telephone) et <id>.libelles (le texte des b1 a b3), a cote du
     mp3. rapport.sh les passe au telephone au moment de l'ecoute : rien n'est
-    calcule pendant que USER attend.
+    calcule pendant que USER attend. Le texte dit peut manquer (stdin vide) : le
+    calcul part alors avec le seul rapport entier.
     """
     texte = sys.stdin.read().strip()[:4000]
-    if not texte or not re.fullmatch(r"[\w-]+", ident):
+    if not re.fullmatch(r"[\w-]+", ident):
         return 1
+    if not texte:
+        # Lance avant le resume vocal (2026-10-28) : le rapport entier est deja
+        # dans le contexte, le resume n'ajoute que ce que USER entendra.
+        texte = ("(le resume dit a voix haute se prepare en meme temps : il"
+                 " reprend l'essentiel du rapport entier ci-dessus)")
     cache = os.path.expanduser("~/.hermes/qg-voix")
+    t0 = time.time()
     try:
-        brut = appeler("claude-opus-5-5-medium-notools", APRES_RAPPORT + profil(), [],
+        # [appelant:...] : le proxy nomme l'appel dans proxy-usage.jsonl.
+        brut = appeler("claude-opus-5-5-medium-notools",
+                       APRES_RAPPORT + profil() + "\n[appelant:qg-boutons-rapport]", [],
                        contexte_rapport(ident)
                        + "\n\n## Ce que USER vient d'entendre\n" + texte)
         liste = json.loads(re.search(r"\{.*\}", brut, re.S).group(0)).get("boutons")
@@ -810,7 +830,7 @@ def choix_rapport(ident):
         return 1
     with open(os.path.join(cache, ident + ".choix"), "w", encoding="utf-8") as f:
         f.write(ligne + "\n")
-    journal("boutons du rapport {} : {}".format(ident, ligne))
+    journal("boutons du rapport {} : {} ({:.1f} s)".format(ident, ligne, time.time() - t0))
     print(ligne)
     return 0
 

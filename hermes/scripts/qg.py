@@ -122,6 +122,13 @@ def lignes():
     rows = c.execute(
         "SELECT * FROM topics ORDER BY derniere_activite DESC").fetchall()
     c.close()
+    # Topics supprimes de Telegram puis fusionnes (arbre.json, _fusion) : ils ne sont plus des sujets actifs.
+    try:
+        mortes = set(json.load(open(os.path.expanduser("~/.hermes/fil/arbre.json"))).get("_fusion", {}))
+    except Exception:
+        mortes = set()
+    if mortes and not os.environ.get("QG_TOUT"):
+        rows = [r for r in rows if str(r["thread_id"] or "") not in mortes]
     return rows
 
 
