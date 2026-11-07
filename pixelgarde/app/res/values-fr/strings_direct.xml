@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La conversation directe (Direct.java, 2026-11-03). -->
+<resources>
+    <string name="bulle_menu_direct">Conversation directe</string>
+    <string name="bulle_menu_direct_fin">Arrêter la conversation</string>
+    <string name="direct_titre">Conversation directe</string>
+    <string name="direct_canal">Conversation directe</string>
+    <string name="direct_fini">Conversation terminée.</string>
+    <string name="direct_jeton">Clé du relais refusée.</string>
+    <string name="direct_reseau">Liaison perdue.</string>
+    <string name="direct_erreur">Erreur du serveur, conversation arrêtée.</string>
+    <string name="direct_micro">Micro indisponible.</string>
+    <string name="direct_sans_relais">Aucun relais configuré.</string>
+    <string name="direct_voix_ouverte">Le mode tour est déjà ouvert.</string>
+</resources>

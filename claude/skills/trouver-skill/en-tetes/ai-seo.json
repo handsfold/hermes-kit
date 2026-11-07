@@ -1,0 +1,11 @@
+{
+  "accroche": "AI SEO (GEO) : etre cite par les IA generatives.",
+  "fait": "Optimise un site pour les moteurs generatifs : extraits citables, autorite, presence dans les reponses IA.",
+  "pas_pour": "Pas pour le SEO Google classique (voir seo-audit).",
+  "quand": "USER dit « GEO », « IA cite le site », « AI Overviews », « ChatGPT recommande ». Aussi quand on veut apparaitre dans les reponses d'IA.",
+  "motifs": [
+    "geo|ai.?seo|perplexity|chatgpt|overviews"
+  ],
+  "origine_sha": "42ebfadca309010d",
+  "date": "2026-11-04"
+}

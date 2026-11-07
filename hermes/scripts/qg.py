@@ -12,15 +12,21 @@ conversations grossissent ; lire une ligne coute pareil au bout d'un an.
 """
 import json
 import os
+import re
 import subprocess
 import sqlite3
 import sys
 import time
+import urllib.error
+import urllib.request
 
 DB = os.path.expanduser("~/.hermes/qg.db")
 STATE = os.path.expanduser("~/.hermes/state.db")
 ANNUAIRE = os.path.expanduser("~/.hermes/channel_directory.json")
 NOMS = os.path.expanduser("~/.hermes/qg-noms.json")
+OVERRIDES = os.path.expanduser("~/.hermes/gateway_model_overrides.json")
+CONFIG = os.path.expanduser("~/.hermes/config.yaml")
+AUTH = os.path.expanduser("~/.hermes/auth.json")
 NEUTRE = "/tmp/hermes-qg-run"
 
 
@@ -122,6 +128,13 @@ def lignes():
     rows = c.execute(
         "SELECT * FROM topics ORDER BY derniere_activite DESC").fetchall()
     c.close()
+    # Topics supprimes de Telegram puis fusionnes (arbre.json, _fusion) : ils ne sont plus des sujets actifs.
+    try:
+        mortes = set(json.load(open(os.path.expanduser("~/.hermes/fil/arbre.json"))).get("_fusion", {}))
+    except Exception:
+        mortes = set()
+    if mortes and not os.environ.get("QG_TOUT"):
+        rows = [r for r in rows if str(r["thread_id"] or "") not in mortes]
     return rows
 
 
@@ -170,6 +183,141 @@ def llm(prompt, modele="haiku", timeout=180):
         return r.stdout
 
 
+def _cle_env(nom):
+    """Valeur d'une variable de ~/.hermes/.env (jamais affichee)."""
+    try:
+        for l in open(os.path.expanduser("~/.hermes/.env")):
+            if l.startswith(nom + "="):
+                return l.split("=", 1)[1].strip().strip("'\"")
+    except Exception:
+        pass
+    return os.environ.get(nom, "")
+
+
+def cles_du_pool(prov, cle_figee=""):
+    """Cles du pool d'identifiants pour ce provider, dans l'ordre du gateway
+    (priorite puis ordre de declaration), en sautant celles marquees epuisees
+    ou invalides. La cle figee dans l'override passe en dernier recours : c'est
+    elle qui vieillit quand USER recharge une autre cle du pool (2026-11-06).
+    """
+    cles = []
+    try:
+        pool = json.load(open(AUTH)).get("credential_pool") or {}
+        entrees = pool.get(f"custom:{prov}") or pool.get(prov) or []
+        gardees = []
+        for i, e in enumerate(entrees):
+            c = e.get("access_token") or ""
+            if c and e.get("last_status") not in ("exhausted", "invalid"):
+                gardees.append((e.get("priority") or 0, i, c))
+        cles = [c for _, _, c in sorted(gardees)]
+    except Exception:
+        pass
+    if cle_figee and cle_figee not in cles:
+        cles.append(cle_figee)
+    return cles
+
+
+def route_du_topic(session_key, thread_id=None):
+    """La route LLM effective d'un topic, dans l'ordre du gateway :
+    1) override de session (gateway_model_overrides.json, commande /model),
+    2) platforms.telegram.channel_overrides de config.yaml (cle = thread_id),
+    3) defaut global (bloc `model:`).
+    Un duel PyRIT (`a-vs-b`) est ramene a sa cible (apres le dernier `-vs-`).
+    """
+    import yaml
+    try:
+        cfg = yaml.safe_load(open(CONFIG)) or {}
+    except Exception:
+        cfg = {}
+    provs = cfg.get("providers") or {}
+
+    def route(modele, prov, base="", mode="", cle=""):
+        if "-vs-" in (modele or ""):
+            modele = modele.rsplit("-vs-", 1)[1]
+        p = provs.get(prov) or {}
+        if not cle and p.get("key_env"):
+            cle = _cle_env(p["key_env"])
+        cle = cle or p.get("api_key", "")
+        cles = cles_du_pool(prov, cle)
+        return {"model": modele, "provider": prov,
+                "base_url": base or p.get("base_url", ""),
+                "api_mode": mode or p.get("api_mode", ""),
+                "api_key": cles[0] if cles else cle, "cles": cles}
+
+    try:
+        ov = json.load(open(OVERRIDES)).get(session_key or "") or None
+    except Exception:
+        ov = None
+    if ov and ov.get("model") and ov.get("base_url"):
+        return route(ov["model"], ov.get("provider", ""), ov["base_url"],
+                     ov.get("api_mode", ""), ov.get("api_key", ""))
+    co = (((cfg.get("platforms") or {}).get("telegram") or {})
+          .get("channel_overrides") or {})
+    ch = co.get(str(thread_id)) if thread_id else None
+    if ch and ch.get("model") and ch.get("provider"):
+        return route(ch["model"], ch["provider"])
+    m = cfg.get("model") or {}
+    if not m.get("default"):
+        return None
+    return route(m["default"], m.get("provider", ""), m.get("base_url", ""),
+                 m.get("api_mode", ""))
+
+
+def _http_json(url, entetes, corps, timeout):
+    req = urllib.request.Request(
+        url, data=json.dumps(corps).encode("utf-8"),
+        headers={"content-type": "application/json", **entetes})
+    with urllib.request.urlopen(req, timeout=timeout) as rep:
+        return json.loads(rep.read().decode("utf-8"))
+
+
+def llm_topic(prompt, route, timeout=180):
+    """Un appel LLM direct sur la route du topic, sans passer par le CLI Claude
+    (qui ne connait que les modeles Anthropic)."""
+    base = (route.get("base_url") or "").rstrip("/")
+    if route.get("api_mode") == "anthropic_messages":
+        data = _http_json(base + "/v1/messages",
+                          {"x-api-key": route.get("api_key", ""),
+                           "anthropic-version": "2023-06-01"},
+                          {"model": route["model"], "max_tokens": 700,
+                           "messages": [{"role": "user", "content": prompt}]},
+                          timeout)
+        txt = "".join(b.get("text", "") for b in (data.get("content") or [])
+                      if isinstance(b, dict) and b.get("type") == "text")
+    else:
+        corps = {"model": route["model"], "max_tokens": 700,
+                 "messages": [{"role": "user", "content": prompt}]}
+        # Refuseless refuse `medium` (HTTP 400) : effort explicite bas.
+        if route.get("provider") == "refuseless":
+            corps["reasoning_effort"] = "low"
+        # Une cle en 402 ne tue pas le resume : on passe a la suivante du pool.
+        cles = route.get("cles") or ([route["api_key"]] if route.get("api_key") else [])
+        txt, dernier = "", None
+        for c in cles:
+            try:
+                data = _http_json(base + "/chat/completions",
+                                  {"Authorization": "Bearer " + c}, corps, timeout)
+                txt = (((data.get("choices") or [{}])[0].get("message") or {})
+                       .get("content") or "")
+                if txt.strip():
+                    break
+                dernier = RuntimeError("reponse vide")
+            except urllib.error.HTTPError as e:
+                dernier = e
+                if e.code in (401, 402, 403, 429):
+                    continue
+                raise
+            except Exception as e:
+                dernier = e
+                continue
+        else:
+            raise RuntimeError(f"toutes les cles en echec ({dernier})")
+    txt = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", txt, flags=re.S).strip()
+    if not txt:
+        raise RuntimeError(f"reponse vide de {route.get('model')}")
+    return txt
+
+
 GABARIT = """Voici le dernier echange d'une conversation de travail entre USER et son agent.
 
 Derniere demande de USER :
@@ -199,8 +347,17 @@ def cmd_resumer(force=False):
         if not (r["dernier_message"] or r["derniere_reponse"]):
             continue
         try:
-            txt = llm(GABARIT.format(msg=(r["dernier_message"] or "(inconnue)")[:500],
-                                     rep=(r["derniere_reponse"] or "(aucune)")[:500])).strip()
+            prompt = GABARIT.format(msg=(r["dernier_message"] or "(inconnue)")[:500],
+                                    rep=(r["derniere_reponse"] or "(aucune)")[:500])
+            route = route_du_topic(r["session_key"], r["thread_id"])
+            try:
+                if not route:
+                    raise RuntimeError("pas de route")
+                txt = llm_topic(prompt, route).strip()
+            except Exception as e:
+                print(f'  route {route and route.get("model")} en echec ({e}) : repli haiku',
+                      file=sys.stderr)
+                txt = llm(prompt).strip()
         except Exception as e:
             print(f'  echec sur {r["session_id"]}: {e}', file=sys.stderr)
             continue
