@@ -25,7 +25,7 @@ cas REFUS Bash 'cd ~/Bureau/Projets && git clone git@github.com:a/zz-neuf-test.g
 cas REFUS Bash 'mkdir zz-neuf-test' "$P"
 cas REFUS Bash 'cp -r /tmp/x $HOME/Bureau/Projets/zz-neuf-test'
 cas REFUS Bash 'echo a > ~/Bureau/Projets/zz-notes.md'
-cas REFUS Bash 'bash ~/.claude/skills/nouveau-projet/scaffold.sh ~/Bureau/Projets/zz-neuf-test js-web'
+cas REFUS Bash 'bash ~/.claude/skills/construire/nouveau-projet/scaffold.sh ~/Bureau/Projets/zz-neuf-test js-web'
 cas REFUS Write "$P/zz-neuf-test/README.md"
 cas REFUS Write "$P/zz-notes.md"
 cas REFUS Bash 'mkdir -p ~/Bureau/Projets/perso/zz-neuf-test'

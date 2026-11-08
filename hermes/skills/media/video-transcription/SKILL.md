@@ -2,6 +2,7 @@
 name: video-transcription
 description: "Lien vidéo, transcris, résume-moi ça : lire sans voir. Lit une vidéo en ligne à partir de son lien, sans la regarder : titre, auteur, durée, description et transcription intégrale de la parole (Instagram Reel, TikTok, YouTube, Shorts, X, Facebook, Reddit, Twitch)."
 when_to_use: "Se déclenche dès qu'un lien vidéo est collé, ou que USER dit « transcris cette vidéo », « c'est quoi cette vidéo », « résume-moi ça », « qu'est-ce qu'il dit ». Pas pour analyser les images ni le montage (voir analyse-video)."
+disable-model-invocation: true
 ---
 
 # Transcrire une video depuis son lien

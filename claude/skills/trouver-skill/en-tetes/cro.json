@@ -1,0 +1,11 @@
+{
+  "accroche": "CRO : augmente le taux de conversion d'un site.",
+  "fait": "Ameliore la conversion : structure de page, appels a l'action, confiance, friction, tests A/B.",
+  "pas_pour": "Pas pour attirer du trafic (voir seo-audit).",
+  "quand": "USER dit « conversion », « plus de ventes », « le site vend moins ». Aussi avant de refaire une page de vente.",
+  "motifs": [
+    "conversion|cro|taux de vente"
+  ],
+  "origine_sha": "99c3bbb5bf00c50a",
+  "date": "2026-11-04"
+}
