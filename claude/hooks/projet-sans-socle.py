@@ -6,7 +6,7 @@ Le dossier business/sites/realvoxai nait a la main (mkdir, Write), sans
 scripts/check.sh, sans tests, sans garde-fous, et la zone Cloudflare garde les
 reglages par defaut corriges ailleurs depuis aout. Le socle est pose apres
 coup. USER : « vu qu'il etait pas dans ma liste de projets, tu aurais du en
-deduire » que c'etait un projet neuf. La skill nouveau-projet ne se declenchait
+deduire » que c'etait un projet neuf. La skill construire (guide nouveau-projet) ne se declenchait
 que sur le mot « projet » : une consigne se rate, ce hook ne se rate pas.
 
 Regle : un nom NEUF sous Projets/<univers>/<famille>/ (univers business ou
@@ -96,14 +96,14 @@ def main():
     u, f, nom = p.split("/")
     motif = f"""Refus : `Projets/{p}` n'existe pas encore, c'est un projet NEUF.
 
-Un projet neuf nait par le socle (skill nouveau-projet), meme si USER n'a pas dit
+Un projet neuf nait par le socle (skill construire, guide nouveau-projet), meme si USER n'a pas dit
 « projet » : « fais une landing », « fais un site », « j'ai pris le domaine »
 creent un projet des qu'il est absent de ~/Bureau/Projets/INDEX.md.
 
-  bash ~/.claude/skills/nouveau-projet/scaffold.sh ~/Bureau/Projets/{p} <python-api|python-cli|js-web|mixte>
+  bash ~/.claude/skills/construire/nouveau-projet/scaffold.sh ~/Bureau/Projets/{p} <python-api|python-cli|js-web|mixte>
 
-Site sur Cloudflare : lire ensuite la section « Site Cloudflare » de la skill
-nouveau-projet (zone, deploiement, SEO). Ne le 2026-10-28 (realvoxai cree sans
+Site sur Cloudflare : lire ensuite la section « Site Cloudflare » du guide
+nouveau-projet, skill construire (zone, deploiement, SEO). Ne le 2026-10-28 (realvoxai cree sans
 socle). Laissez-passer, sur demande de USER seulement : SANS_SOCLE=1."""
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",

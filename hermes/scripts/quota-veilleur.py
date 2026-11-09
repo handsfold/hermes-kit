@@ -52,7 +52,7 @@ def env(cle):
 # Claude (demande de USER, 2026-10-26 : « switcher sur le modèle que je veux avec le niveau
 # d'intelligence que je veux, appliqué à tous les topics »). Le plugin quota-bouton porte
 # la meme grille (quota:m:<c>, puis quota:t:<c>:<effort>).
-MODELES_CHOIX = {"o": ("claude-opus-5-5", "Opus 5.5"), "s": ("claude-sonnet-5-5", "Sonnet 5.5")}
+MODELES_CHOIX = {"o": ("claude-opus-4-8", "Opus 4.8"), "s": ("claude-sonnet-5-5", "Sonnet 5.5")}
 EFFORTS_TOUS = ("low", "medium", "high", "xhigh", "max")
 BOUTONS_SEMAINE = [[{"text": n, "callback_data": f"quota:m:{c}"} for c, (_, n) in MODELES_CHOIX.items()],
                    [{"text": "Garder ainsi", "callback_data": "quota:garder"}]]
@@ -203,7 +203,7 @@ def reprise(etat):
 # Opus et Sonnet puisent dans la meme enveloppe de 7 jours (seven_day_opus est
 # vide). Le declencheur est donc l'AVANCE : % utilise moins % de semaine ecoulee.
 CONFIG = f"{HOME}/.hermes/config.yaml"
-OPUS, SONNET = "claude-opus-5-5", "claude-sonnet-5-5"
+OPUS, SONNET = "claude-opus-4-8", "claude-sonnet-5-5"
 # Depuis le 2026-10-25 plus aucune bascule seule : USER choisit au bouton, sans choix tout
 # reste sur Opus, et le jour suivant (minuit, Bangkok) tout revient sur Opus.
 EFFORTS = ("medium", "high")

@@ -491,6 +491,65 @@ def noter_envoi(etat, cible, demande):
 
 # ---------------------------------------------------------- l'appel
 
+def modele_rapport(ident):
+    """La route LLM du topic d'origine d'un rapport, ou None.
+
+    La cible du rapport (telegram:chat:thread) resout par qg-attente
+    (override de session, canal, defaut global). 2026-11-08 : les boutons
+    ne jugent plus avec un modele fixe.
+    """
+    try:
+        c = sqlite3.connect("file:{}?mode=ro".format(QG_DB), uri=True, timeout=2)
+        r = c.execute("SELECT cible FROM attente WHERE id=?", (ident,)).fetchone()
+        c.close()
+    except Exception:
+        return None
+    if not r or not r[0]:
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("qg_attente_mod", QG_ATTENTE)
+        qa = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qa)
+        return qa.modele_du_topic(r[0])
+    except Exception:
+        return None
+
+
+def appeler_direct(route, systeme, phrase):
+    """Appel HTTP au fournisseur du topic, cles du pool en rotation."""
+    import urllib.request
+    import urllib.error
+    base = (route.get("base_url") or "").rstrip("/")
+    corps = {"model": route["model"], "max_tokens": 900,
+             "messages": [{"role": "system", "content": systeme},
+                          {"role": "user", "content": phrase}]}
+    if route.get("provider") == "refuseless":
+        corps["reasoning_effort"] = "low"
+    dernier = None
+    txt = ""
+    for cle in (route.get("cles") or [route.get("api_key")]):
+        if route.get("api_mode") == "anthropic_messages":
+            url = base + ("/messages" if base.endswith("/v1") else "/v1/messages")
+            ent = {"x-api-key": cle, "anthropic-version": "2023-06-01"}
+        else:
+            url = base + "/chat/completions"
+            ent = {"Authorization": "Bearer " + cle}
+        ent["Content-Type"] = "application/json"
+        try:
+            req = urllib.request.Request(url, json.dumps(corps).encode(), ent)
+            with urllib.request.urlopen(req, timeout=60) as f:
+                rep = json.loads(f.read().decode("utf-8"))
+            txt = (rep["choices"][0]["message"].get("content") if "choices" in rep
+                   else "".join(b.get("text", "") for b in rep.get("content", []))) or ""
+            if txt.strip():
+                return txt
+        except Exception as e:
+            dernier = e
+            continue
+    raise RuntimeError("direct en echec : {}".format(dernier))
+
+
 def appeler(modele, systeme, historique, phrase):
     # Les essais du chantier (tests/creeper-file.sh) remplacent le modele par
     # une reponse fixe, et sa lenteur par une attente : le routeur reste hors jeu.
@@ -502,7 +561,7 @@ def appeler(modele, systeme, historique, phrase):
         msgs.append({"role": "user", "content": h["poste"]})
         msgs.append({"role": "assistant", "content": h["moi"]})
     msgs.append({"role": "user", "content": phrase})
-    corps = json.dumps({"model": modele, "max_tokens": 700,
+    corps = json.dumps({"model": modele, "max_tokens": 900,
                         "system": systeme, "messages": msgs}).encode()
     req = urllib.request.Request(ROUTEUR, data=corps, headers={
         "content-type": "application/json", "x-api-key": "local",
@@ -521,6 +580,17 @@ def extraire(texte):
             return json.loads(m.group(0))
         except ValueError:
             pass
+    # JSON tronque (max_tokens atteint) : on recupere au moins le message,
+    # et le resume s'il est entier. Sinon le panneau affichait le JSON brut
+    # (vu le 2026-11-01 00:00). On cherche dans tout le texte : un JSON coupe
+    # en plein "nom" n'a plus d'accolade fermante.
+    md = re.search(r'"dire"\s*:\s*"((?:[^"\\]|\\.)*)', texte)
+    if md:
+        d = {"action": "repondre", "dire": json.loads('"' + md.group(1) + '"')}
+        mp = re.search(r'"resume"\s*:\s*"((?:[^"\\]|\\.)*)', texte)
+        if mp:
+            d["personne"] = {"resume": json.loads('"'+mp.group(1)+'"')}
+        return d
     # Le modele a parle au lieu de rendre du JSON : on dit ce qu'il a dit.
     return {"action": "repondre", "dire": texte[:400]}
 
@@ -783,16 +853,46 @@ def choix_rapport(ident):
     Le texte dit arrive sur l'entree standard. Sortie : <id>.choix (la ligne
     pour le telephone) et <id>.libelles (le texte des b1 a b3), a cote du
     mp3. rapport.sh les passe au telephone au moment de l'ecoute : rien n'est
-    calcule pendant que USER attend.
+    calcule pendant que USER attend. Le texte dit peut manquer (stdin vide) : le
+    calcul part alors avec le seul rapport entier.
     """
     texte = sys.stdin.read().strip()[:4000]
-    if not texte or not re.fullmatch(r"[\w-]+", ident):
+    if not re.fullmatch(r"[\w-]+", ident):
         return 1
+    if not texte:
+        # Lance avant le resume vocal (2026-10-28) : le rapport entier est deja
+        # dans le contexte, le resume n'ajoute que ce que USER entendra.
+        texte = ("(le resume dit a voix haute se prepare en meme temps : il"
+                 " reprend l'essentiel du rapport entier ci-dessus)")
     cache = os.path.expanduser("~/.hermes/qg-voix")
+    t0 = time.time()
     try:
-        brut = appeler("claude-opus-5-5-medium-notools", APRES_RAPPORT + profil(), [],
-                       contexte_rapport(ident)
-                       + "\n\n## Ce que USER vient d'entendre\n" + texte)
+        # [appelant:...] : le proxy nomme l'appel dans proxy-usage.jsonl.
+        contexte = (contexte_rapport(ident)
+                    + "\n\n## Ce que USER vient d'entendre\n" + texte)
+        systeme = APRES_RAPPORT + profil() + "\n[appelant:qg-boutons-rapport]"
+        route = modele_rapport(ident)
+
+        def obtenir():
+            if route and route.get("model", "").startswith("claude-"):
+                return appeler(route["model"].split("@")[0] + "-medium-notools",
+                               systeme, [], contexte)
+            if route and route.get("base_url"):
+                return appeler_direct(route, systeme, contexte)
+            repli = reglage() or DEFAUT
+            if not repli.endswith("-notools"):
+                repli += "-notools"
+            return appeler(repli, systeme, [], contexte)
+
+        try:
+            brut = obtenir()
+        except Exception:
+            brut = None
+        # Refus ou echec du modele du topic : remontee sur Opus 4.8, permissif
+        # (choix de USER, 2026-11-08). Jamais une descente.
+        if not brut or re.search(r"(?i)je ne peux pas|impossible de|cannot verify|"
+                                 r"peux-tu (me )?confirmer|hors (du )?perimetre", brut):
+            brut = appeler("claude-opus-4-8-medium-notools", systeme, [], contexte)
         liste = json.loads(re.search(r"\{.*\}", brut, re.S).group(0)).get("boutons")
         # Le modele rend parfois [{"text": "Oui"}] au lieu de ["Oui"].
         if isinstance(liste, list):
@@ -810,7 +910,7 @@ def choix_rapport(ident):
         return 1
     with open(os.path.join(cache, ident + ".choix"), "w", encoding="utf-8") as f:
         f.write(ligne + "\n")
-    journal("boutons du rapport {} : {}".format(ident, ligne))
+    journal("boutons du rapport {} : {} ({:.1f} s)".format(ident, ligne, time.time() - t0))
     print(ligne)
     return 0
 

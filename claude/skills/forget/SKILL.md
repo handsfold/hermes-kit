@@ -4,6 +4,7 @@ description: "Oublie X, efface de ta mémoire : oubli durable. Efface durablemen
 when_to_use: "L'utilisateur dit « oublie X », « supprime X de ta mémoire », « ne te rappelle plus de X », « efface ce qu'on a fait sur X »."
 argument-hint: [sujet ou mot-clé à oublier]
 allowed-tools: Bash(~/.claude/skills/forget/forget-mem.sh:*), Read, Edit, Grep, Glob
+disable-model-invocation: true
 ---
 
 # /forget : Oublier durablement un sujet

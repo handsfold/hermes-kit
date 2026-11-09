@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La conversation directe (Direct.java, 2026-11-03). -->
+<resources>
+    <string name="bulle_menu_direct">Live conversation</string>
+    <string name="bulle_menu_direct_fin">Stop the conversation</string>
+    <string name="direct_titre">Live conversation</string>
+    <string name="direct_canal">Live conversation</string>
+    <string name="direct_fini">Conversation ended.</string>
+    <string name="direct_jeton">Relay key refused.</string>
+    <string name="direct_reseau">Connection lost.</string>
+    <string name="direct_erreur">Server error, conversation ended.</string>
+    <string name="direct_micro">Microphone unavailable.</string>
+    <string name="direct_sans_relais">No relay configured.</string>
+    <string name="direct_voix_ouverte">Turn mode is already open.</string>
+</resources>

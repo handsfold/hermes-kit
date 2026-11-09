@@ -1,0 +1,11 @@
+{
+  "accroche": "A/B testing : teste deux versions et garde la gagnante.",
+  "fait": "Concoit et analyse des tests A/B : hypotheses, variantes, duree, significativite.",
+  "pas_pour": "Pas pour refondre une page sans mesure (voir cro).",
+  "quand": "USER dit « tester deux versions », « A/B ». Aussi quand deux options se disputent sur une page.",
+  "motifs": [
+    "a/?b|test.*ab|ab.*test"
+  ],
+  "origine_sha": "26c2682141258199",
+  "date": "2026-11-04"
+}

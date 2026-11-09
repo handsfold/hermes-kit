@@ -1,0 +1,11 @@
+{
+  "accroche": "Annuaires : inscrire le site dans les annuaires utiles.",
+  "fait": "Soumet un site aux annuaires et places de liste utiles pour son marche, et suit les inscriptions.",
+  "pas_pour": "Pas pour l'analyse de concurrents (voir competitors).",
+  "quand": "USER dit « annuaires », « soumettre le site », « backlinks simples ». Aussi quand le site a peu de liens entrants.",
+  "motifs": [
+    "directory|annuaire|backlink"
+  ],
+  "origine_sha": "a5fdbd6d4d48d8a9",
+  "date": "2026-11-04"
+}

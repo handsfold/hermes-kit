@@ -36,10 +36,10 @@
 # accents sont permis : le garde les encode pour adb (pour_adb).
 # « missions » (2026-10-03) ouvre l'ecran Missions de l'appli, sans script :
 # le garde n'y met que le libelle vivant (« Missions · ProjetA tourne »).
-voix:Parler au QG
+# retire le 2026-11-03 (la conversation directe remplace) - voix:Parler au QG
 ecrire:Écrire
-bilan:Où j'en suis
-conseil:Conseil
+# retire le 2026-11-03 (la conversation directe remplace) - bilan:Où j'en suis
+# retire le 2026-11-03 (la conversation directe remplace) - conseil:Conseil
 missions:Activité
 lirepresse:Lire le presse-papier
 voixmode:Rapports
