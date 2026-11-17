@@ -604,8 +604,8 @@ def evaluer(a):
 
 # ---------------------------------------------------------------- model router
 
-LLM_URL = os.environ.get("HK_LLM_URL", "http://localhost:8000/anthropic/v1/messages")
-LLM_MODELE = os.environ.get("HK_LLM_MODEL", "claude-sonnet-5-5")
+LLM_URL = os.environ.get("HK_LLM_URL", "http://localhost:8010/anthropic/v1/messages")
+LLM_MODELE = os.environ.get("HK_LLM_MODEL", "glm-5.3-flash-abliterated")
 LLM_CLE = os.environ.get("HK_LLM_KEY", "x")
 # Name given to the proxy (proxy-usage.jsonl "appelant"): one per caller, so each is measured.
 LLM_APPELANT = os.environ.get("HK_LLM_APPELANT", "hk-aiguilleur")

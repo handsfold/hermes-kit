@@ -54,7 +54,8 @@ def main():
     for nom, regle in table.items():
         if nom.startswith("_") or not regle.get("forcer"):
             continue
-        for motif in regle.get("motifs", []):
+        # motifs_forces : dans une skill fusionnee, seuls les motifs des anciennes skills forcees
+        for motif in regle.get("motifs_forces", regle.get("motifs", [])):
             m = re.search(motif, texte, re.I)
             if m:
                 if not deja_chargee(nom, entree.get("transcript_path") or ""):

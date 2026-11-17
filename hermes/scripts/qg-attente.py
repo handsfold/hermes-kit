@@ -9,7 +9,9 @@ qui grossit doit couter le meme prix au bout d'un an qu'au premier jour.
 
   qg-attente                 la file, du plus recent au plus vieux
   qg-attente --json          idem, pour un script
-  qg-attente add ...         depose un rapport (voir --aide-add)
+  qg-attente add ...         depose un rapport (--regime notify|question|review)
+  qg-attente inbox           JSON des demandes ouvertes et informations silencieuses
+                            [--regime notify|question|review]
   qg-attente tete            l'id du rapport en tete, ou rien
   qg-attente texte <id>      le resume complet
   qg-attente lu <id>         marque lu (sort de la file)
@@ -60,6 +62,13 @@ def cx():
     c = sqlite3.connect(DB, timeout=5.0)
     c.row_factory = sqlite3.Row
     c.executescript(SCHEMA)
+    # Migration additive : les anciens producteurs restent des revues.
+    if 'regime' not in {r[1] for r in c.execute('PRAGMA table_info(attente)')}:
+        try:
+            c.execute("ALTER TABLE attente ADD COLUMN regime TEXT NOT NULL DEFAULT 'review'")
+        except sqlite3.OperationalError:
+            if 'regime' not in {r[1] for r in c.execute('PRAGMA table_info(attente)')}:
+                raise
     c.commit()
     return c
 
@@ -106,7 +115,17 @@ def cmd_liste(en_json):
 
 
 def vers_memoire_qg(ident):
-    """Lance scripts/qg-memoire.py <id> detache. Ne bloque ni ne leve."""
+    """Lance scripts/qg-memoire.py <id> detache. Ne bloque ni ne leve.
+    Une information silencieuse (regime notify) n'occupe pas la memoire du QG :
+    elle reste dans sa file, lisible sur demande."""
+    try:
+        c = cx()
+        reg = c.execute("SELECT regime FROM attente WHERE id=?", (ident,)).fetchone()
+        c.close()
+        if reg and reg[0] == "notify":
+            return
+    except Exception:
+        pass
     try:
         subprocess.Popen([os.path.expanduser("~/.hermes/scripts/qg-memoire.py"), str(ident)],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -153,9 +172,10 @@ def cmd_add(a):
         resume = sys.stdin.read()
     c = cx()
     cur = c.execute(
-        "INSERT INTO attente (cree, source, origine, cible, titre, resume)"
-        " VALUES (?,?,?,?,?,?)",
-        (time.time(), a.source, a.origine, a.cible, titre, resume),
+        "INSERT INTO attente (cree, source, origine, cible, titre, resume, regime, statut)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (time.time(), a.source, a.origine, a.cible, titre, resume, a.regime,
+         'information' if a.regime == 'notify' else 'nouveau'),
     )
     c.commit()
     ident = cur.lastrowid
@@ -170,6 +190,21 @@ def cmd_add(a):
     except OSError:
         pass
     print(ident)
+    return 0
+
+
+def cmd_inbox(regime=None):
+    """Toutes les demandes ouvertes, informations silencieuses comprises."""
+    c = cx()
+    sql = "SELECT * FROM attente WHERE statut IN ('nouveau','information')"
+    params = ()
+    if regime:
+        sql += ' AND regime=?'
+        params = (regime,)
+    rows = c.execute(sql + " ORDER BY CASE regime WHEN 'question' THEN 0 "
+                     "WHEN 'review' THEN 1 ELSE 2 END, cree", params).fetchall()
+    c.close()
+    print(json.dumps([dict(r) for r in rows], ensure_ascii=False))
     return 0
 
 
@@ -252,7 +287,183 @@ def sujets(rows):
     return vus
 
 
-def condenser(brut):
+OVERRIDES = os.path.expanduser("~/.hermes/gateway_model_overrides.json")
+JOURNAL_MODELE = os.path.expanduser("~/.hermes/qg-dispatch.log")
+
+
+def _qg():
+    """Le module qg.py, pour resoudre la route complete d'un topic."""
+    global _QG_MOD
+    try:
+        if _QG_MOD is None:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "qg", os.path.expanduser("~/.hermes/scripts/qg.py"))
+            _QG_MOD = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(_QG_MOD)
+        return _QG_MOD
+    except Exception:
+        return None
+
+
+_QG_MOD = None
+
+
+def modele_du_topic(cible):
+    """La route effective du thread d'une cible « telegram:<chat>:<thread> ».
+
+    Passe par qg.route_du_topic : override de session, puis channel_overrides,
+    puis defaut global. Duel PyRIT ramene a sa cible, cles du pool incluses.
+    Rend un dict {model, provider, base_url, api_mode, api_key, cles} ou None.
+    """
+    p = (cible or "").split(":")
+    if len(p) < 3 or p[0] != "telegram":
+        return None
+    m = _qg()
+    if not m:
+        return None
+    return m.route_du_topic("agent:main:telegram:group:{}:{}".format(p[1], p[2]), p[2])
+
+
+def _trace_modele(quoi, modele, voie):
+    """Une ligne dans le journal du QG : quel modele a vraiment resume."""
+    try:
+        with open(JOURNAL_MODELE, "a", encoding="utf-8") as j:
+            j.write("{} condenser-{} modele={} voie={}\n".format(
+                time.strftime("%Y-%m-%d %H:%M:%S"), quoi, modele, voie))
+    except OSError:
+        pass
+
+
+def _appel_direct(ov, prompt):
+    """Appel HTTP au fournisseur d'un topic non Claude. None si echec.
+
+    Les cles du pool sont essayees dans l'ordre ; un 401, 402, 403 ou 429
+    passe a la suivante, comme partout ailleurs (2026-11-07).
+    """
+    import urllib.request
+    import urllib.error
+    base = (ov.get("base_url") or "").rstrip("/")
+    cles = ov.get("cles") or ([ov.get("api_key")] if ov.get("api_key") else [])
+    if not base or not cles:
+        return None
+    if ov.get("api_mode") == "anthropic_messages":
+        url = base + ("/messages" if base.endswith("/v1") else "/v1/messages")
+        corps = {"model": ov["model"], "max_tokens": 1500,
+                 "messages": [{"role": "user", "content": prompt}]}
+    else:
+        url = base + "/chat/completions"
+        corps = {"model": ov["model"], "max_tokens": 1500,
+                 "messages": [{"role": "user", "content": prompt}]}
+        if ov.get("provider") == "refuseless":
+            corps["reasoning_effort"] = "low"
+    dernier = None
+    txt = ""
+    for cle in cles:
+        ent = {"x-api-key": cle, "anthropic-version": "2023-06-01"} \
+            if ov.get("api_mode") == "anthropic_messages" \
+            else {"Authorization": "Bearer " + cle}
+        ent["Content-Type"] = "application/json"
+        try:
+            req = urllib.request.Request(url, json.dumps(corps).encode(), ent)
+            with urllib.request.urlopen(req, timeout=90) as f:
+                rep = json.loads(f.read().decode("utf-8"))
+            if "choices" in rep:
+                txt = rep["choices"][0]["message"].get("content") or ""
+            else:
+                txt = "".join(b.get("text", "") for b in rep.get("content", []))
+            if txt.strip():
+                break
+        except urllib.error.HTTPError as e:
+            dernier = e
+            if e.code in (401, 402, 403, 429):
+                continue
+            return None
+        except Exception as e:
+            dernier = e
+            continue
+    # Les modeles de raisonnement laissent parfois leur bloc de pensee.
+    txt = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", txt, flags=re.S)
+    return txt.strip() or None
+
+
+def _claude_p(modele, prompt):
+    os.makedirs(NEUTRE, exist_ok=True)
+    r = subprocess.run(
+        ["claude", "-p", "--output-format", "json", "--model", modele,
+         "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
+         "--no-session-persistence"],
+        input=prompt, capture_output=True, text=True, timeout=90, cwd=NEUTRE)
+    if r.returncode != 0:
+        return None
+    return (json.loads(r.stdout).get("result") or "").strip() or None
+
+
+def _opus(prompt):
+    """Repli permissif : Opus 4.8 ne refuse pas ou peu (choix de USER, 2026-11-08)."""
+    txt = _claude_p("claude-opus-4-8", prompt)
+    if txt:
+        _trace_modele("opus", "claude-opus-4-8", "repli opus")
+    return txt
+
+
+REFUS_SORTIE = re.compile(
+    r"(?i)je ne peux pas|impossible de|cannot verify|can't (verify|access)|"
+    r"peux-tu (me )?(confirmer|preciser)|il me manque|besoin d'acces|pas acces|"
+    r"hors (du )?(perimetre|champ)|out of scope")
+
+
+def generer(quoi, prompt, cible=None):
+    """Le texte condense, par le modele du topic, sinon par le defaut global.
+
+    Topic Claude : `claude -p` sur ce modele. Topic non Claude : appel direct
+    a son fournisseur. Un refus de raisonnement ou une erreur dans la reponse
+    remonte sur Opus 4.8, plus permissif (choix de USER, 2026-11-08). Le defaut
+    global de config.yaml reste le premier repli.
+    """
+    ov = modele_du_topic(cible)
+    if ov:
+        nom = ov["model"]
+        try:
+            if nom.startswith("claude-"):
+                if "haiku" in nom:
+                    raise ValueError("haiku exclu")
+                txt = _claude_p(nom.split("@")[0], prompt)
+                voie = "claude-p"
+            else:
+                txt = _appel_direct(ov, prompt)
+                voie = "direct"
+            if txt and not REFUS_SORTIE.search(txt):
+                _trace_modele(quoi, nom, voie)
+                return txt
+            if txt:
+                _trace_modele(quoi, nom, "refus detecte")
+        except Exception:
+            pass
+    defaut = modele_du_topic(None) or {}
+    if defaut.get("model"):
+        try:
+            if defaut["model"].startswith("claude-"):
+                txt = _claude_p(defaut["model"].split("@")[0], prompt)
+            else:
+                txt = _appel_direct(defaut, prompt)
+            if txt and not REFUS_SORTIE.search(txt):
+                _trace_modele(quoi, defaut["model"], "defaut global")
+                return txt
+        except Exception:
+            pass
+    opus = _opus(prompt)
+    if opus and not REFUS_SORTIE.search(opus):
+        return opus
+    _trace_modele(quoi, reglage("modele"), "repli (reglage)")
+    try:
+        return _claude_p(reglage("modele"), prompt)
+    except Exception:
+        return None
+
+
+
+def condenser(brut, cible=None):
     """Le texte brut des rapports, ramene a un point oral de 3 phrases.
 
     Le digest recopiait mot pour mot la reponse du topic. USER recevait donc
@@ -261,21 +472,7 @@ def condenser(brut):
     un rapport. En cas d'echec on retombe sur le brut : mieux vaut un
     doublon qu'un silence.
     """
-    try:
-        os.makedirs(NEUTRE, exist_ok=True)
-        r = subprocess.run(
-            ["claude", "-p", "--output-format", "json",
-             "--model", reglage("modele"),
-             "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
-             "--no-session-persistence"],
-            input=GABARIT_DIGEST.format(brut=brut[:6000]),
-            capture_output=True, text=True, timeout=90, cwd=NEUTRE)
-        if r.returncode != 0:
-            return None
-        txt = (json.loads(r.stdout).get("result") or "").strip()
-        return txt or None
-    except Exception:
-        return None
+    return generer("digest", GABARIT_DIGEST.format(brut=brut[:6000]), cible)
 
 
 def cmd_digest():
@@ -300,7 +497,9 @@ def cmd_digest():
             " du sujet " + n if n else "", r["titre"],
             " ".join((r["resume"] or "").split())))
     brut = "\n\n".join(morceaux)
-    court = condenser(brut)
+    # Un seul topic dans le lot : son modele resume. Plusieurs : le defaut.
+    cibles = {r["cible"] for r in rows if r["cible"]}
+    court = condenser(brut, cibles.pop() if len(cibles) == 1 else None)
     if court:
         # Le modele glisse des tirets cadratins, proscrits partout chez USER.
         # Vu le 2026-08-28 dans un digest livre au QG.
@@ -353,6 +552,50 @@ def cmd_relais(ident, message):
         return 1
     cible = r["cible"] or ""
     source = r["source"] or ""
+    if source.startswith('agent-fond:'):
+        agent = source.split(':', 1)[1]
+        d = os.path.expanduser('~/.claude/agents-fond/' + agent)
+        try:
+            moteur = open(os.path.join(d, 'moteur')).read().strip()
+        except OSError:
+            moteur = ''
+        if moteur == 'pi':
+            try:
+                courant = open(os.path.join(d, 'qg-id')).read().strip()
+            except OSError:
+                courant = ''
+            if courant != str(ident):
+                print('rapport ancien ou chantier deja repris : utiliser son dernier rapport', file=sys.stderr)
+                return 1
+            chantier = os.environ.get('CHANTIER_BIN') or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.realpath(__file__)))), 'bin', 'chantier')
+            # Reservation atomique avant lancement : deux clics ne reprennent pas
+            # deux fois la meme session. Une erreur rend le rapport disponible.
+            c = cx()
+            c.execute('BEGIN IMMEDIATE')
+            ancien = c.execute('SELECT statut FROM attente WHERE id=?', (ident,)).fetchone()[0]
+            if ancien in ('relaye', 'relais_en_cours'):
+                c.close()
+                print('rapport deja relaye', file=sys.stderr)
+                return 1
+            c.execute("UPDATE attente SET statut='relais_en_cours' WHERE id=?", (ident,))
+            c.commit()
+            try:
+                abandon = message.strip().lower() in ('abandonne', 'abandonner')
+                args = [chantier, 'abandonner' if abandon else 'reprendre', agent]
+                if not abandon:
+                    args.append(message.strip())
+                sortie = subprocess.run(args, capture_output=True, text=True, timeout=60)
+                ok = sortie.returncode == 0
+                print((sortie.stdout or sortie.stderr).strip())
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                ok = False
+                print(str(exc), file=sys.stderr)
+            c.execute('UPDATE attente SET statut=?, statut_maj=? WHERE id=?',
+                      ('relaye' if ok else ancien, time.time(), ident))
+            c.commit()
+            c.close()
+            return 0 if ok else 1
     if not cible.startswith("telegram:") and source.startswith("agent-fond:"):
         # Rapport d'un agent detache (recos du cockpit, travaux longs) : il
         # n'a pas de topic, et son agent est fini. Le 2026-10-24, le « Oui »
@@ -554,7 +797,7 @@ Regles pour l'oreille :
 Rends uniquement ce texte."""
 
 
-def condenser_un(brut, question=""):
+def condenser_un(brut, question="", cible=None):
     """Un seul rapport, ramene a 20 secondes dites, qui finit sur une decision.
 
     Le 2026-10-02, USER a voulu que chaque rapport le fasse DECIDER, pas
@@ -568,23 +811,10 @@ def condenser_un(brut, question=""):
     l'ecoute supportable, le passage par sonnet. Il revient ici, pour un rapport
     au lieu de tous.
     """
-    try:
-        os.makedirs(NEUTRE, exist_ok=True)
-        r = subprocess.run(
-            ["claude", "-p", "--output-format", "json",
-             "--model", reglage("modele"),
-             "--max-turns", "1", "--setting-sources", "", "--strict-mcp-config",
-             "--no-session-persistence"],
-            input=GABARIT_UN.format(
-                brut=brut[:6000],
-                question=("\nCe que USER avait demande : {}\n".format(question.strip())
-                          if question and question.strip() else "")),
-            capture_output=True, text=True, timeout=90, cwd=NEUTRE)
-        if r.returncode != 0:
-            return None
-        return (json.loads(r.stdout).get("result") or "").strip() or None
-    except Exception:
-        return None
+    return generer("un", GABARIT_UN.format(
+        brut=brut[:6000],
+        question=("\nCe que USER avait demande : {}\n".format(question.strip())
+                  if question and question.strip() else "")), cible)
 
 
 def pour_la_voix(txt):
@@ -631,7 +861,7 @@ def pour_la_voix(txt):
 def cmd_voix(ident):
     """Le texte d'un rapport, prepare pour la synthese vocale."""
     c = cx()
-    r = c.execute("select titre, resume, source from attente where id = ?",
+    r = c.execute("select titre, resume, source, cible from attente where id = ?",
                   (ident,)).fetchone()
     c.close()
     if not r:
@@ -659,7 +889,7 @@ def cmd_voix(ident):
             q = r["source"] or ""
             if q.startswith("Gateway message origin"):   # en-tete du hook, pas une demande
                 q = ""
-            court = condenser_un(brut, q)
+            court = condenser_un(brut, q, r["cible"])
             if court:
                 try:
                     os.makedirs(os.path.dirname(cache), exist_ok=True)
@@ -753,6 +983,9 @@ def main():
     a.add_argument("--source", default=None)
     a.add_argument("--origine", default=None)
     a.add_argument("--cible", default=None)
+    a.add_argument("--regime", choices=('notify', 'question', 'review'), default='review')
+    inbox = sub.add_parser('inbox')
+    inbox.add_argument('--regime', choices=('notify', 'question', 'review'))
 
     for nom in ("tete", "purge", "digest", "ids", "sujets"):
         sub.add_parser(nom)
@@ -773,6 +1006,8 @@ def main():
     args = p.parse_args()
     if args.cmd is None:
         return cmd_liste(args.json)
+    if args.cmd == 'inbox':
+        return cmd_inbox(args.regime)
     if args.cmd == "add":
         return cmd_add(args)
     if args.cmd == "tete":

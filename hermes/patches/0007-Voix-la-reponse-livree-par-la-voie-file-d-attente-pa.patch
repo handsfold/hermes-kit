@@ -14,7 +14,7 @@ Retouche: R08
  1 file changed, 18 insertions(+)
 
 diff --git a/gateway/run_turn.py b/gateway/run_turn.py
-index 38b586bde2..2eff09243e 100644
+index 38b586bde2a..2eff09243e3 100644
 --- a/gateway/run_turn.py
 +++ b/gateway/run_turn.py
 @@ -3510,6 +3510,24 @@ class GatewayTurnMixin:

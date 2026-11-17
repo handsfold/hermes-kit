@@ -1,14 +1,39 @@
 model:
-  default: claude-opus-5-5
-  provider: anthropic
-  base_url: http://localhost:8000
-fallback_providers: []
+  default: gpt-6-luna
+  provider: openai-codex
+  aliases:
+    gratuit-glm-flash: teamorouter/glm-5.3-flash-free
+    gratuit-deepseek-v4: teamorouter/deepseek-v4-flash-free
+    gratuit-deepseek: teamorouter/deepseek-flash-free
+    top-gpt-6-1-sol: teamorouter/gpt-6.1-sol
+    top-gemini-4-hydrogen: teamorouter/gemini-4-hydrogen
+    top-grok-4-7: teamorouter/grok-4.7
+fallback_providers:
+  - provider: zai
+    model: glm-4.7-flash
+  - provider: teamorouter
+    model: glm-5.3-flash
+  - provider: claude-proxy
+    model: claude-sonnet-5-5
 credential_pool_strategies:
   openrouter: fill_first
+  custom:refuseless: fill_first
 toolsets:
-  - hermes-cli
+  - clarify
+  - code_execution
+  - cronjob
+  - delegation
+  - file
+  - memory
+  - session_search
+  - skills
+  - terminal
+  - todo
+  - vision
+  - web
+  - code-gratuit
 agent:
-  max_turns: 90
+  max_turns: 120
   gateway_timeout: 1800
   restart_drain_timeout: 60
   service_tier: ''
@@ -18,6 +43,23 @@ agent:
   gateway_notify_interval: 300
   personalities:
     catgirl: You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and cat-like expressions to your speech. Use kaomoji like (=^･ω･^=) and ฅ^•ﻌ•^ฅ. Be playful and curious like a cat, nya~!
+    caveman: 'Voix caveman permanente, en français. Réponse d''abord, puis la raison, puis 1 ligne « Prochaine étape : ».
+
+      Pas de préambule, pas de récapitulatif, pas de formule de politesse. Articles optionnels, sens jamais : garde not/jamais/seulement, chiffres, chemins, commandes et erreurs à l''identique.
+
+      Réponse finale : 8 lignes maximum, 1 000 caractères au plus, sauf rapport demandé. Aucun texte entre deux appels d''outils, sauf 1 ligne au changement de phase.
+
+      Phrases de 15 mots maximum, une idée par phrase. USER est dyslexique : mots courants, chiffres en chiffres, un gras par puce au plus, chemins isolés en `code`, ni émoji ni tiret long.
+
+      Chaque constat porte sa preuve (mesuré, lu dans tel fichier) ou « non vérifié ». Sigle : forme longue à la 1re apparition.
+
+      Quand ça a raté : 1 phrase, la cause, sans excuses. Une seule question à la fois, fermée, qui se répond en 1 phrase.
+
+      Ne commit, ne pousse, ne déploie pas sans demande. Ne supprime rien sans confirmation.
+
+      Texte thaï (ou tout texte destiné à un tiers, en toute langue) : seul dans UN bloc de code, traduction française en dessous, hors du bloc.
+
+      Sécurité, action irréversible, étapes dont l''ordre compte : phrases entières, puis reprise du style.'
     clair: "Tu écris pour USER. Il est dyslexique. Un pavé de texte lui coûte 3 fois plus\nd'effort qu'à un autre lecteur. Ta réponse doit se lire en diagonale et rester\njuste. Chaque mot en trop est un mot qu'il devra décoder.\n\n## La forme, avant tout\n\n- **Phrases courtes.** 15 mots maximum. Une idée par phrase.\n- **Pas de subordonnées empilées.** Coupe en 2 phrases plutôt que d'enchaîner\n  « ce qui fait que, sachant que, étant donné que ».\n- **Mots courants.** Si un mot technique est nécessaire, garde-le, mais donne sa\n  traduction une fois entre parenthèses.\n- **Jamais plus de 3 lignes d'affilée** sans saut de ligne ou puce.\n- **Un gras par puce, au plus.** Le gras porte le mot-clé, pas la phrase.\n  Trop de gras = plus de repère du tout.\n- **Chiffres en chiffres.** « 3 fichiers », jamais « trois fichiers ».\n- **Pas de double négation.** Dis ce qui est, pas ce qui n'est pas.\n- **Chemins de fichiers isolés** en `code`, jamais noyés au milieu d'une phrase.\n- **Jamais de tiret cadratin.** Utilise « · » ou « : » ou un point.\n- **Pas d'émoji.** Ni dans le texte, ni dans le code, ni dans une interface.\n\n## L'ordre est toujours le même\n\nIl doit pouvoir sauter directement au bloc qui l'intéresse. Même structure à\nchaque fois :\n\n1. **La réponse, en 1 phrase.** Toujours en tête. Jamais enterrée en fin de\n   paragraphe.\n2. **Le détail, en puces.** 5 puces maximum. Au-delà, tu regroupes.\n3. **Prochaine étape : un coup d'avance.** 3 lignes :\n   - **Le nœud** : le seul fait qui décide la suite.\n   - **Ma reco** : ce que tu ferais, et pourquoi, en 1 ligne.\n   - **Si oui** : tu fais A, puis B. **Si non** : tu fais C.\n   Question fermée, qui se répond à l'oral en 1 phrase : il dicte. Sans décision\n   à prendre, 1 ligne : ce que tu fais ensuite.\n\nSi la réponse est « oui » ou « non », le premier mot est « oui » ou « non ».\n\n## Pour qui tu écris\n\nLe but : que USER réponde juste. Un message réussi est un message après lequel il tranche.\n\n- **Il lit en diagonale.** Le sens tient dans les chiffres, les puces et la fin : ce sont\n  les 3 segments qu'il reprend (47 %, 42 %, 51 %, analyse du 2026-10-18).\n- **Seul l'écart compte.** Dis ce qui a changé, pas l'état complet ni ce qu'il sait.\n- **Il élargit quand on le resserre** sans dire où ça mène : chaque question dit ce qu'elle débloque.\n- **Il raisonne en principe premier.** Pose le principe en 1 ligne, avant la reco.\n- **Ce que tu as tranché seul**, dis-le en 1 ligne, pour qu'il puisse le contester.\n\n## Ce que tu ne fais jamais\n\n- Pas de préambule. Pas de « bonne question », pas de « je vais commencer par ».\n- Pas de récapitulatif de ce qu'il vient de dire. Il le sait.\n- Pas de bloc de code non demandé. S'il faut montrer, montre 5 lignes, pas 50.\n- Pas de tableau au-delà de 4 colonnes. Illisible.\n- Pas de liste d'options exhaustive. 3 maximum, la recommandée en premier.\n- Pas d'affirmation nue. Chaque constat porte sa preuve dans la même phrase\n  (« vu dans les logs Cloudflare », « testé à 390 px »). Sinon : « non vérifié ».\n  1re cause de contestation de USER : 26 cas sur 45 (analyse du 2026-10-18).\n- Pas de nom interne (outil, script, topic, fiche) sans dire en 3 mots ce que c'est.\n- 1 200 caractères au plus par message, sauf rapport demandé. Au-delà, USER redemande.\n- Aucun sigle sans sa forme longue entre parenthèses, la 1re fois.\n- Tout chiffre dit d'où il vient (mesuré, lu dans tel fichier, estimé). Toute durée\n  annoncée passe par la règle de `methodes/estimations.md`. 10 chiffres contestés sur 16\n  étaient incohérents ou sans source (analyse du 2026-10-18).\n\n## Le cap\n\nC'est le point le plus important. USER construit beaucoup d'outils. Le risque\npermanent est de polir l'outil au lieu d'avancer vers le but.\n\n- **Nomme l'objectif** en début de tâche, en 1 ligne, quand la tâche est longue.\n- **Ligne « ça rapproche du but » : seulement si la réponse est non**, ou si la\n  tâche a dérivé. Jamais en routine : reprise par USER dans 8 % des cas seulement.\n- **Si la demande éloigne du cap annoncé du projet, dis-le en 1 ligne.** Puis\n  fais quand même ce qui est demandé, en entier. C'est sa décision, pas la tienne.\n- **Ne propose jamais un chantier d'outillage** de toi-même quand le but du\n  projet est un livrable. Il te le demandera s'il en veut.\n\n## Les questions\n\n- **Une question à la fois.** Jamais un bloc de 4 questions.\n- Tu ne poses une question que si 2 réponses possibles changent vraiment le\n  travail. Sinon tu choisis, tu fais, et tu dis en 1 ligne ce que tu as supposé.\n\n## Quand ça a raté\n\n- Dis-le en 1 phrase, sans excuses, sans détour.\n- Donne la cause, pas le récit de ta recherche.\n- Ne te flagelle pas et n'énumère pas tes erreurs passées.\n\n## Le code reste du vrai code\n\nLe style change ta façon de PARLER, pas ta façon de travailler.\n\n- Tu suis les conventions du dépôt : même nommage, même densité de commentaires.\n- Tu ne commit pas, tu ne pousses pas, tu ne déploies pas sans qu'il le demande.\n- Tu finis la tâche en entier. Si une partie est bloquée, tu fais tout le reste\n  et tu dis clairement ce que tu as laissé de côté.\n- Tu ne supprimes rien sans confirmation.\n\n## Texte thaï à copier\n\nTout texte en thaï à envoyer (LINE, mail, SMS) va **seul dans un bloc de code** ``` ```.\nSur Telegram, un toucher sur le bloc le copie en entier. Une citation entre guillemets ne se copie pas.\nLa traduction française reste hors du bloc, en dessous.\nPlusieurs phrases thaïes dans une réponse : toutes dans UN SEUL bloc, une ligne vide entre elles.\nLes traductions suivent, numérotées dans le même ordre. Né le 10/10/2026 : 9 blocs séparés, bouton copier visible sur 3 seulement."
     coach: 'Tu es le coach de USER. Pas un assistant : un ami exigeant qui le connait et qui tient dans la duree.
 
@@ -123,7 +165,9 @@ compression:
   enabled: true
   context_timeout_seconds: 420
   context_total_ceiling_seconds: 1800
-  threshold: 0.2
+  threshold: 0.45
+  cold_after_seconds: 3600
+  cold_threshold: 0.125
   target_ratio: 0.2
   protect_last_n: 10
 bedrock:
@@ -139,69 +183,190 @@ bedrock:
     trace: disabled
 auxiliary:
   vision:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
     download_timeout: 30
+    extra_body: {}
+    reasoning_effort: low
   web_extract:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 360
+    reasoning_effort: low
   compression:
-    provider: auto
-    model: claude-sonnet-5-5-low
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 420
+    extra_body: {}
+    reasoning_effort: low
+    no_progress_timeout:
   skills_hub:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
+    extra_body: {}
+    reasoning_effort: low
   approval:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
+    extra_body: {}
+    reasoning_effort: low
   mcp:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
+    extra_body: {}
+    reasoning_effort: low
   title_generation:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
+    enabled: true
+    model_upgrade_enabled: true
+    prefer_fast_model: false
+    extra_body: {}
+    reasoning_effort: low
+    language: ''
   session_search:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
     extra_body: {}
     max_concurrency: 3
+    reasoning_effort: low
   flush_memories:
-    provider: auto
-    model: claude-sonnet-5-5
+    provider: openai-codex
+    model: gpt-6-sol
     base_url: ''
     api_key: ''
     timeout: 30
     extra_body: {}
+    reasoning_effort: low
   background_review:
-    provider: anthropic
-    model: claude-sonnet-5-5
-    base_url: http://localhost:8000
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
     extra_tools:
       - fact_store
+    enabled: true
+    api_key: ''
+    timeout: 120
+    extra_body: {}
+    reasoning_effort: low
+    max_input_tokens: 12000
+  review:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    api_mode: ''
+    reasoning_effort: low
+  memory_query_rewrite:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 8
+    extra_body: {}
+    reasoning_effort: low
+  tts_audio_tags:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 30
+    extra_body: {}
+    reasoning_effort: low
+  voice_chat:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 120
+    extra_body: {}
+    reasoning_effort: low
+  triage_specifier:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 120
+    extra_body: {}
+    reasoning_effort: low
+  kanban_decomposer:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 180
+    extra_body: {}
+    reasoning_effort: low
+  profile_describer:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 60
+    extra_body: {}
+    reasoning_effort: low
+  goal_judge:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 60
+    extra_body: {}
+    reasoning_effort: low
+  curator:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 600
+    extra_body: {}
+    reasoning_effort: low
+  monitor:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 60
+    extra_body: {}
+    reasoning_effort: low
+  moa_reference:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 900
+    extra_body: {}
+    reasoning_effort: low
+  moa_aggregator:
+    provider: openai-codex
+    model: gpt-6-sol
+    base_url: ''
+    api_key: ''
+    timeout: 900
+    extra_body: {}
+    reasoning_effort: low
 display:
   runtime_footer:
     enabled: false
@@ -210,7 +375,7 @@ display:
       - effort
       - context_pct
   compact: false
-  personality: clair
+  personality: caveman
   busy_ack_enabled: false
   resume_display: full
   busy_input_mode: steer
@@ -228,7 +393,7 @@ display:
   tool_progress_command: false
   tool_preview_length: 0
   background_process_notifications: concise
-  tool_progress: off
+  tool_progress: false
 dashboard:
   theme: cyberpunk
   font: system-mono
@@ -307,14 +472,14 @@ memory:
   user_char_limit: 1375
   provider: holographic
   flush_min_turns: 6
-  nudge_interval: 10
+  nudge_interval: 40
 delegation:
-  model: ''
-  provider: ''
+  model: gpt-6-luna
+  provider: openai-codex
   base_url: ''
   api_key: ''
-  max_iterations: 250
-  reasoning_effort: ''
+  max_iterations: 20
+  reasoning_effort: low
   default_toolsets:
     - terminal
     - file
@@ -324,76 +489,211 @@ skills:
   external_dirs:
     - $HOME/.agents/skills
   disabled:
-    - docx
-    - pdf
-    - xlsx
-    - reframer
+    - ab-testing
+    - ai-seo
+    - airtable
+    - architecture-diagram
+    - arxiv
     - ascii-art
     - ascii-video
+    - attaque-parts-vault
+    - attaques-protocoles
+    - audiocraft-audio-generation
+    - audiotruth-banc
+    - autoplan
+    - axolotl
     - baoyu-comic
     - baoyu-infographic
-    - comfyui
-    - design-md
-    - excalidraw
-    - manim-video
-    - p5js
-    - pixel-art
-    - pretext
-    - songwriting-and-ai-music
-    - touchdesigner-mcp
-    - architecture-diagram
-    - ideation
-    - sketch
-    - minecraft-modpack-server
-    - pokemon-player
-    - huggingface-hub
-    - evaluating-llms-harness
-    - weights-and-biases
-    - gguf-quantization
-    - guidance
-    - llama-cpp
-    - obliteratus
-    - outlines
-    - serving-llms-vllm
-    - audiocraft-audio-generation
-    - clip
-    - segment-anything-model
-    - stable-diffusion-image-generation
-    - whisper
-    - dspy
-    - axolotl
-    - fine-tuning-with-trl
-    - grpo-rl-training
-    - peft-fine-tuning
-    - pytorch-fsdp
-    - unsloth
-    - modal-serverless-gpu
-    - jupyter-live-kernel
-    - godmode
-    - yuanbao
-    - debugging-hermes-tui-commands
-    - inspecting-hermes-desktop-dom
-    - node-inspect-debugger
-    - python-debugpy
-    - hermes-desktop-plugins
-    - teams-meeting-pipeline
+    - benchmark
+    - benchmark-models
+    - bitcoin-address-datasets
+    - blogwatcher
     - box
-    - linear
-    - airtable
-    - petdex
-    - polymarket
-    - mcporter
-    - opencode
-    - heartmula
-    - songsee
+    - browse
+    - built-in-browser
+    - canary
+    - careful
+    - caveman
+    - chrome-browser
+    - chrome-forensics
+    - claude-design
+    - claude-pousseur
+    - clip
+    - cloud-cost-guard
+    - codebase-inspection
+    - codex
+    - comfyui
+    - competitor-news-monitor
+    - content-strategy
+    - context-restore
+    - context-save
+    - create-rule
+    - create-skill
+    - create-subagent
+    - cso
+    - deal-hunting-phone
+    - debugging-hermes-tui-commands
+    - deep-research
+    - design-consultation
+    - design-html
+    - design-md
+    - design-review
+    - design-shotgun
+    - devex-review
+    - diagram
+    - directory-submissions
+    - docs
+    - document-generate
+    - document-release
+    - document-to-action-items
+    - docx
+    - dogfood
+    - dspy
+    - evaluating-llms-harness
+    - excalidraw
+    - find-nearby
+    - find-skills
+    - fine-tuning-with-trl
+    - freeze
+    - gguf-quantization
     - gif-search
-    - smart-search
+    - github-auth
+    - github-code-review
+    - github-issues
+    - github-pr-workflow
+    - github-repo-management
+    - godmode
+    - grounded-citations
+    - grpo-rl-training
+    - gstack-openclaw-ceo-review
+    - gstack-openclaw-investigate
+    - gstack-openclaw-office-hours
+    - gstack-openclaw-retro
+    - gstack-upgrade
+    - gstack/connect-chrome
+    - gstack/open-gstack-browser
+    - guard
+    - guidance
+    - hackernews-frontpage
+    - health
+    - heartmula
+    - hermes-agent-skill-authoring
+    - hermes-desktop-plugins
+    - huggingface-hub
+    - ideation
+    - import-memory
+    - inspecting-hermes-desktop-dom
+    - investigate
+    - ios-clean
+    - ios-design-review
+    - ios-fix
+    - ios-qa
+    - ios-sync
+    - jupyter-live-kernel
     - kanban-orchestrator
     - kanban-worker
+    - land-and-deploy
+    - landing-report
+    - last30days
+    - learn
+    - linear
+    - llama-cpp
+    - llm-wiki
+    - make-pdf
+    - manim-video
+    - maps
+    - marque-handsfold
+    - mcporter
+    - meeting-action-items
+    - migrate-to-skills
+    - minecraft-modpack-server
+    - mlops/evaluation/evaluating-llms-harness
+    - mlops/evaluation/lm-evaluation-harness
+    - mlops/inference/serving-llms-vllm
+    - mlops/inference/vllm
+    - modal-serverless-gpu
+    - morning
+    - nano-pdf
+    - node-inspect-debugger
+    - notion
+    - obliteratus
+    - opencli-adapter-author
+    - opencli-autofix
+    - opencode
+    - openhue
+    - outlines
+    - p5js
+    - pair-agent
+    - parallel-scan-optimization
+    - pdf
+    - peft-fine-tuning
+    - petdex
+    - pixel-art
+    - plan-ceo-review
+    - plan-design-review
+    - plan-devex-review
+    - plan-eng-review
+    - plan-tune
+    - pokemon-player
+    - polymarket
+    - popular-web-designs
+    - powerpoint
+    - pptx
+    - pretext
+    - product-price-monitor
+    - programmatic-seo
+    - python-debugpy
+    - pytorch-fsdp
+    - qa
+    - qa-only
+    - reframer
+    - requesting-code-review
+    - research-paper-writing
+    - retro
+    - retro-pivots
+    - review
+    - schema
+    - scrape
+    - segment-anything-model
+    - serving-llms-vllm
+    - setup-browser-cookies
+    - setup-deploy
+    - setup-gbrain
+    - ship
+    - simplify-code
+    - site-architecture
+    - sketch
+    - skill-creator
+    - skillify
+    - smart-search
+    - songsee
+    - songwriting-and-ai-music
+    - spec
+    - spike
+    - spotify
+    - stable-diffusion-image-generation
+    - subagent-driven-development
+    - supabase-postgres-best-practices
+    - sync-gbrain
+    - teams-meeting-pipeline
+    - tinder-agent
+    - touchdesigner-mcp
+    - unfreeze
+    - unsloth
+    - update-cursor-settings
+    - wallet-entropy-audit
+    - weekly-review-planning
+    - weights-and-biases
+    - whisper
+    - xitter
+    - xlsx
+    - xurl
+    - youtube-content
+    - yuanbao
   template_vars: true
   inline_shell: false
   inline_shell_timeout: 10
-  creation_nudge_interval: 15
+  creation_nudge_interval: 60
 timezone: ''
 discord:
   require_mention: true
@@ -423,7 +723,9 @@ security:
   tirith_enabled: false
   protected_instruction_files: false
 cron:
-  script_timeout_seconds: 18000  # boucle des skills sans plafond (USER, 2026-10-27) : ~7 min par skill
+  model: gpt-6.1-sol
+  model_provider: openai-codex
+  script_timeout_seconds: 18000
   wrap_response: true
 code_execution:
   mode: project
@@ -451,27 +753,19 @@ smart_model_routing:
   enabled: false
   max_simple_chars: 160
   max_simple_words: 28
-  cheap_model:
-    model: anthropic/claude-haiku-4.5
-    provider: openrouter
 group_sessions_per_user: true
 platform_toolsets:
   cli:
-    - browser
     - clarify
     - code_execution
     - cronjob
     - delegation
     - file
-    - image_gen
     - memory
-    - messaging
-    - moa
     - session_search
     - skills
     - terminal
     - todo
-    - tts
     - vision
     - web
   discord:
@@ -483,21 +777,16 @@ platform_toolsets:
   slack:
     - hermes-slack
   telegram:
-    - browser
     - clarify
     - code_execution
     - cronjob
     - delegation
     - file
-    - image_gen
     - memory
-    - messaging
-    - moa
     - session_search
     - skills
     - terminal
     - todo
-    - tts
     - vision
     - web
   whatsapp:
@@ -527,14 +816,33 @@ platforms:
       host: 127.0.0.1
       port: 8644
   telegram:
+    channel_overrides:
+      '1826':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
+      '59330':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
+      '59331':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
+      '59332':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
+      '59320':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
+      '59323':
+        model: glm-5.3-flash-abliterated
+        provider: refuseless
     channel_prompts:
-      '__QG_THREAD__': 'IMPORTANT : le style clair (personnalite globale) s''applique ici aussi. Ici tu n''es pas l''assistant technique d''un sujet : tu es le QG, le chef d''orchestre de tous les topics de USER.
+      '__QG_THREAD__': 'IMPORTANT : la voix caveman (personnalite globale) s''applique ici aussi, forme comprise. Ici tu n''es pas l''assistant technique d''un sujet : tu es le QG, le chef d''orchestre de tous les topics de USER.
 
 
         TON ROLE, EN BREF. Tu recois les rapports de TOUS les topics de USER (sous-agents, missions, crons). Ils entrent dans ta memoire, une ligne chacun, sous la forme « [Rapport <id> · <topic>] <debut du texte> ». Le texte entier : `qg-attente texte <id>`. Ces rapports partent aussi vers le Creeper (la pastille du telephone de USER), qui les lui lit. USER y repond par la voix ou ici. Ton travail : comprendre de quel rapport il parle, meme sans citation, et faire suivre sa reponse au bon topic (`qg-attente relais <id> "<sa phrase>"`). Tu as donc le contexte de tout : sers-t''en pour relier les sujets entre eux, sans lui faire repeter ce qu''un rapport dit deja.
 
 
-        TA PREMIERE ACTION de chaque session : lance `qg`. Une ligne par topic : nom, age, nombre de tours, cible de messagerie, etat. Lis aussi ~/Bureau/Projets/contexte/focus.md et taches.md : le cap de USER prime sur ce qui remue le plus.
+        TA PREMIERE ACTION de chaque session : lance `qg`. Une ligne par topic : nom, age, nombre de tours, cible de messagerie, etat, et modele en service. Quand USER demande quel modele tourne dans un topic, ou veut un rapport la-dessus, lis ce champ dans la sortie de `qg`, ne devine jamais et ne te fie pas a ce que le modele repond de lui-meme. Lis aussi ~/Bureau/Projets/contexte/focus.md et taches.md : le cap de USER prime sur ce qui remue le plus.
 
 
         Tu ne relis JAMAIS un transcript pour savoir ou en est un sujet. Relire coute de plus en plus cher a mesure que les conversations grossissent ; lire une ligne d''etat coute pareil dans un an. C''est tout le pari de ce poste.
@@ -639,7 +947,7 @@ platforms:
 
 
         REGARD D''EXPERT : le bloc « Regard d''expert » de SOUL.md s''applique aussi ici, sur les questions de fond que tu traites toi-meme (decision, strategie, marketing, argent, droit). Pas sur la coordination des topics ni les ordres pratiques.'
-      '__COACH_THREAD__': 'IMPORTANT : cette consigne remplace entierement la personnalite ''clair'' et les regles de brievete du prompt global. Ici tu es le coach, pas l''assistant technique. Tu peux ecrire des phrases entieres et chaleureuses.
+      '__COACH_THREAD__': 'IMPORTANT : la voix caveman globale s''applique ici aussi : reponse courte, pas de preambule, pas de recapitulatif. Cette consigne ne change que le ROLE et le ton, jamais la forme ni la longueur. Ici tu es le coach, pas l''assistant technique. Tu peux ecrire des phrases entieres et chaleureuses.
 
 
         Tu es le coach de USER. Pas un assistant : un ami exigeant qui le connait et qui tient dans la duree.
@@ -706,6 +1014,8 @@ platforms:
               icon_color: 16766590
             - name: Ideas
               icon_color: 13338331
+      require_mention: true
+      free_response_topics: __QG_CHAT__:2923
       command_menu:
         max_commands: 25
         priority_mode: replace
@@ -731,9 +1041,21 @@ platforms:
           - goal
           - voice
           - help
+      free_response_chats: __QG_CHAT__
 providers:
-  # Routeur scinde en 3 groupes dans /model (2026-10-20) : meme URL, en-tete X-Groupe different.
-  # Le fournisseur « routeur » doit rester celui de Claude (model_catalog.claude_via).
+  zai:
+    name: Z.ai (GLM, compte ferme)
+    base_url: https://api.z.ai/api/paas/v4
+    api_key: ""  # a renseigner
+    api_mode: chat_completions
+    discover_models: false
+    context_length: 200000
+    model: glm-4.7-flash
+    models:
+      glm-4.7-flash:
+        context_length: 200000
+      glm-4.7:
+        context_length: 200000
   claude-proxy:
     name: Claude (routeur)
     base_url: http://localhost:8000
@@ -741,7 +1063,7 @@ providers:
     api_mode: anthropic_messages
     discover_models: false
     context_length: 200000
-    model: claude-sonnet-5-5-low
+    model: claude-sonnet-5-5
     extra_headers:
       X-Groupe: claude
     models:
@@ -755,33 +1077,16 @@ providers:
         context_length: 1000000
       claude-haiku-4-5:
         context_length: 200000
-  routeur-api:
-    name: Autres modeles (routeur)
-    base_url: http://localhost:8000
-    api_key: local
-    api_mode: anthropic_messages
-    discover_models: false
-    context_length: 200000
-    model: claude-sonnet-5-5-low
-    extra_headers:
-      X-Groupe: api
-    models:
-      grok:
-        context_length: 256000
-      dolphin:
-        context_length: 128000
-      deepseek:
-        context_length: 128000
+      claude-sonnet-5-5:
+        context_length: 200000
+      claude-haiku-5-5:
+        context_length: 200000
+      claude-fable-5-1:
+        context_length: 200000
       deepseek-flash:
-        context_length: 1000000
-      minimax:
-        context_length: 1000000
-      minimax-m3:
-        context_length: 1000000
-      hermes-4:
-        context_length: 128000
-      hermes-4-70b:
-        context_length: 128000
+        context_length: 200000
+      deepseek-v4-pro:
+        context_length: 200000
   routeur-pyrit:
     name: PyRIT (routeur)
     base_url: http://localhost:8000
@@ -807,46 +1112,193 @@ providers:
         context_length: 200000
       dolphin24b-vs-claude:
         context_length: 200000
-      hermes4-vs-grok4.5:
-        context_length: 200000
-  venice:
-    name: Venice
-    base_url: https://api.venice.ai/api/v1
-    key_env: VENICE_API_KEY
+  refuseless:
+    name: Refuseless
+    base_url: https://api.refuseless.com/v1
+    key_env: REFUSELESS_API_KEY
     api_mode: chat_completions
-    # Seul le modele sans censure de Venice : les 130 autres sont deja sur OpenRouter (2026-10-15).
     discover_models: false
-    model: venice-uncensored-1-2
+    model: glm-5.3-flash-abliterated
+    stale_timeout_seconds: 150
     models:
-      venice-uncensored-1-2:
-        context_length: 128000
-
-# ── Fallback Model ────────────────────────────────────────────────────
-# Automatic provider failover when primary is unavailable.
-# Uncomment and configure to enable. Triggers on rate limits (429),
-# overload (529), service errors (503), or connection failures.
-#
-# Supported providers:
-#   openrouter   (OPENROUTER_API_KEY)  - routes to any model
-#   openai-codex (OAuth - hermes auth) - OpenAI Codex
-#   nous         (OAuth - hermes auth) - Nous Portal
-#   zai          (ZAI_API_KEY)         - Z.AI / GLM
-#   kimi-coding  (KIMI_API_KEY)        - Kimi / Moonshot
-#   kimi-coding-cn (KIMI_CN_API_KEY)   - Kimi / Moonshot (China)
-#   minimax      (MINIMAX_API_KEY)     - MiniMax
-#   minimax-cn   (MINIMAX_CN_API_KEY)  - MiniMax (China)
-#   bedrock      (AWS IAM / boto3)     - AWS Bedrock (Converse API)
-#
-# For custom OpenAI-compatible endpoints, add base_url and key_env.
-#
-# fallback_model:
-#   provider: openrouter
-#   model: anthropic/claude-sonnet-4
+      glm-5.3-abliterated:
+        context_length: 1048576
+      glm-5.3-flash-abliterated:
+        context_length: 1048576
+      deepseek-v4.1-flash-abliterated:
+        context_length: 1048576
+  teamorouter:
+    name: TeamRouter
+    base_url: https://teamorouter.com/v1
+    key_env: TEAMOROUTER_API_KEY
+    api_mode: chat_completions
+    discover_models: false
+    model: glm-5.3-flash-free
+    stale_timeout_seconds: 60
+    models:
+      deepseek-flash-free:
+        context_length: 1048576
+      deepseek-v4-flash-free:
+        context_length: 1048576
+      glm-5.3-flash-free:
+        context_length: 1048576
+      claude-opus-5-5:
+        context_length: 1048576
+      gpt-6.1-sol:
+        context_length: 1048576
+      gemini-4-hydrogen:
+        context_length: 1048576
+      claude-fable-5-2:
+        context_length: 1048576
+      gpt-6.1-terra:
+        context_length: 1048576
+      deepseek-v4-pro:
+        context_length: 1048576
+      grok-4.7:
+        context_length: 1048576
+      claude-sonnet-5-5:
+        context_length: 1048576
+      MiniMax-M3:
+        context_length: 1048576
+      claude-fable-5:
+        context_length: 1048576
+      claude-fable-5-1:
+        context_length: 1048576
+      claude-haiku-4-5:
+        context_length: 1048576
+      claude-haiku-4-5-20251001:
+        context_length: 1048576
+      claude-haiku-5-5:
+        context_length: 1048576
+      claude-opus-4-6:
+        context_length: 1048576
+      claude-opus-4-7:
+        context_length: 1048576
+      claude-opus-4-8:
+        context_length: 1048576
+      claude-opus-5:
+        context_length: 1048576
+      claude-sonnet-4-6:
+        context_length: 1048576
+      claude-sonnet-5:
+        context_length: 1048576
+      deepseek-flash:
+        context_length: 1048576
+      deepseek-flash-1017:
+        context_length: 1048576
+      deepseek-v4-flash:
+        context_length: 1048576
+      deepseek-v4-flash-vision-exp:
+        context_length: 1048576
+      deepseek-v4-pro-260425:
+        context_length: 1048576
+      doubao-seed-2.0-lite:
+        context_length: 1048576
+      doubao-seed-2.1-lite:
+        context_length: 1048576
+      doubao-seed-2.1-pro:
+        context_length: 1048576
+      gemini-3.1-flash-lite-preview:
+        context_length: 1048576
+      gemini-3.1-pro-preview:
+        context_length: 1048576
+      gemini-3.5-flash:
+        context_length: 1048576
+      gemini-3.5-flash-lite:
+        context_length: 1048576
+      gemini-3.6-flash:
+        context_length: 1048576
+      gemini-3.7-flash:
+        context_length: 1048576
+      gemini-3.8-flash:
+        context_length: 1048576
+      gemini-4-argon:
+        context_length: 1048576
+      gemini-4-carbon:
+        context_length: 1048576
+      gemini-nano-banana-2.1:
+        context_length: 1048576
+      glm-5.2:
+        context_length: 1048576
+      glm-5.3:
+        context_length: 1048576
+      glm-5.3-flash:
+        context_length: 1048576
+      gpt-5.4:
+        context_length: 1048576
+      gpt-5.4-mini:
+        context_length: 1048576
+      gpt-5.5:
+        context_length: 1048576
+      gpt-5.6-luna:
+        context_length: 1048576
+      gpt-5.6-sol:
+        context_length: 1048576
+      gpt-5.6-terra:
+        context_length: 1048576
+      gpt-6-astra:
+        context_length: 1048576
+      gpt-6-luna:
+        context_length: 1048576
+      gpt-6-sol:
+        context_length: 1048576
+      grok-4.6:
+        context_length: 1048576
+      jev-1.13.0:
+        context_length: 1048576
+      jev-1.14.0:
+        context_length: 1048576
+      kimi-k3:
+        context_length: 1048576
+      kimi-k3.1-pro:
+        context_length: 1048576
+      kimi-k3.1-pro[1M]:
+        context_length: 1048576
+      kimi-k3[1M]:
+        context_length: 1048576
+      mimo-v2.6-flash:
+        context_length: 1048576
+      mimo-v2.6-pro:
+        context_length: 1048576
+      minimax-m3.1-flash:
+        context_length: 1048576
+      mj_imagine:
+        context_length: 1048576
+      qwen3.7-flash:
+        context_length: 1048576
+      qwen3.7-max:
+        context_length: 1048576
+      qwen3.8-flash:
+        context_length: 1048576
+      qwen3.8-max:
+        context_length: 1048576
+      qwen4-max:
+        context_length: 1048576
+  freellmapi:
+    name: FreeLLMAPI (gratuit, sans clef)
+    base_url: http://127.0.0.1:3001/v1
+    key_env: FREELLMAPI_API_KEY
+    api_mode: chat_completions
+    discover_models: false
+    context_length: 131072
+    model: auto
+    stale_timeout_seconds: 120
+    models:
+      auto:
+        context_length: 131072
+      Qwen3.8-27B:
+        context_length: 131072
+      gpt-oss-120b:
+        context_length: 131072
+      Qwen3.5-397B-A17B:
+        context_length: 131072
 known_plugin_toolsets:
   cli:
     - homeassistant
+    - code-gratuit
   telegram:
     - homeassistant
+    - code-gratuit
   acp:
     - homeassistant
   webhook:
@@ -864,11 +1316,15 @@ model_catalog:
   claude_via: routeur
   ordre:
     - routeur
+    - refuseless
+    - freellmapi
     - routeur-pyrit
     - openai-codex
-    - routeur-api
-    - venice
   libelles:
     claude-proxy: Claude (abonnement, via routeur)
     openai-codex: ChatGPT / Codex (abonnement)
     openrouter: OpenRouter (payant a l'usage)
+    freellmapi: FreeLLMAPI (gratuit, sans clef)
+
+web:
+  search_backend: searxng

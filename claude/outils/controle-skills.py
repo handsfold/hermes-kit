@@ -7,6 +7,7 @@ Lance les outils deja ecrits et resume ce qui demande une action :
   3. usage-skills.py 30 : noms presents a la fois chez Claude et Hermes
   4. usage-skills.py 7 --rates : skills ratees dans plus de 50 % des cas (3 sessions mini)
   5. issue-skills.py 7 : skills corrigees par USER dans plus de 25 % des sessions suivies
+  6. charge du prompt Pi : nombre de skills visibles et jetons du bloc (seuil dur)
 
 Usage : controle-skills.py [--sec]   (--sec : affiche sans deposer au QG)
 Timer : controle-skills.timer (systemd utilisateur), lundi 8 h.
@@ -21,6 +22,10 @@ OUTILS = Path.home() / ".claude/outils"
 PY = "/usr/bin/python3"
 # Doublons de nom voulus par USER (2026-10-24, rapport 4290) : jamais signales.
 HOMONYMES_VOULUS = {"computer-use"}
+# Seuils du prompt Pi, mesures du 2026-11-10 : 91 visibles et ~6000 jetons avant elagage,
+# 25 et 1666 apres. Un retour au-dessus doit se voir avant de couter une session.
+VISIBLES_MAX = 30
+JETONS_MAX = 2600
 
 
 def lancer(*args):
@@ -75,6 +80,16 @@ def main():
                 lignes.append(f"- `{m.group(3)}` : corrigee dans {m.group(2)} % des sessions")
         if lignes:
             ecarts.append("**Skills souvent corrigees** :\n" + "\n".join(lignes))
+
+    code, sortie = lancer(OUTILS / "charge-prompt-pi.py")
+    if code == 0:
+        m = re.search(r"visibles (\d+) jetons (\d+)", sortie)
+        if m:
+            vis, jet = int(m.group(1)), int(m.group(2))
+            if vis > VISIBLES_MAX or jet > JETONS_MAX:
+                ecarts.append(f"**Prompt Pi trop charge** : {vis} skills visibles et "
+                              f"{jet} jetons (seuils {VISIBLES_MAX} et {JETONS_MAX}).\n"
+                              f"- voir `charge-prompt-pi.py --liste` pour les plus lourdes")
 
     if not ecarts:
         print("Aucun ecart.")

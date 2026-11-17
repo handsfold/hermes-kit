@@ -23,7 +23,7 @@ Retouche: R06
 
 diff --git a/gateway/bus.py b/gateway/bus.py
 new file mode 100644
-index 0000000000..5e6ed59572
+index 00000000000..5e6ed595723
 --- /dev/null
 +++ b/gateway/bus.py
 @@ -0,0 +1,224 @@
@@ -252,7 +252,7 @@ index 0000000000..5e6ed59572
 +        logger.warning("bus: reveil du topic %s echoue: %s", cle, exc)
 +        return {"reveille": False, "raison": f"reveil echoue: {exc}"}
 diff --git a/gateway/run_startup.py b/gateway/run_startup.py
-index 4ee1d76eb4..47c08cc747 100644
+index 4ee1d76eb46..47c08cc7478 100644
 --- a/gateway/run_startup.py
 +++ b/gateway/run_startup.py
 @@ -752,6 +752,13 @@ class GatewayStartupMixin:
@@ -271,7 +271,7 @@ index 4ee1d76eb4..47c08cc747 100644
          # Log the resolved max_iterations so operators can verify the config.yaml → env bridge.
 diff --git a/tests/gateway/test_bus.py b/tests/gateway/test_bus.py
 new file mode 100644
-index 0000000000..38333f242a
+index 00000000000..38333f242af
 --- /dev/null
 +++ b/tests/gateway/test_bus.py
 @@ -0,0 +1,166 @@
@@ -443,7 +443,7 @@ index 0000000000..38333f242a
 +    assert "adaptateur" in out["raison"]
 diff --git a/tests/tools/test_send_message_reveiller.py b/tests/tools/test_send_message_reveiller.py
 new file mode 100644
-index 0000000000..95b435b6d8
+index 00000000000..95b435b6d83
 --- /dev/null
 +++ b/tests/tools/test_send_message_reveiller.py
 @@ -0,0 +1,86 @@
@@ -534,7 +534,7 @@ index 0000000000..95b435b6d8
 +    from tools.send_message_tool import SEND_MESSAGE_SCHEMA
 +    assert "reveiller" in SEND_MESSAGE_SCHEMA["parameters"]["properties"]
 diff --git a/tools/send_message_tool.py b/tools/send_message_tool.py
-index 9b1e549fbc..50371212b7 100644
+index 9b1e549fbc0..50371212b77 100644
 --- a/tools/send_message_tool.py
 +++ b/tools/send_message_tool.py
 @@ -201,6 +201,7 @@ def _handle_react(args, remove=False):

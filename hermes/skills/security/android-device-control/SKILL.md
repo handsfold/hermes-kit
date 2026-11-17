@@ -1,8 +1,8 @@
 ---
 name: android-device-control
-description: >-
-  Root, OS custom, banques : config Pixel pour liberté max.
+description: "Piloter le telephone Android Pixel par ADB, captures, taps, apps, enregistrement d'ecran."
 version: 1.0.0
+disable-model-invocation: true
 ---
 
 # Android Device Control : liberté max + compatibilité bancaire

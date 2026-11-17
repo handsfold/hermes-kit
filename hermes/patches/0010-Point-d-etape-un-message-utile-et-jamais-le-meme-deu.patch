@@ -16,7 +16,7 @@ Retouche: R11
  2 files changed, 59 insertions(+), 15 deletions(-)
 
 diff --git a/gateway/run_turn.py b/gateway/run_turn.py
-index 8fdedc04e8..6185359263 100644
+index 8fdedc04e89..61853592630 100644
 --- a/gateway/run_turn.py
 +++ b/gateway/run_turn.py
 @@ -3923,6 +3923,49 @@ class GatewayTurnMixin:
@@ -102,7 +102,7 @@ index 8fdedc04e8..6185359263 100644
              try:
                  _notify_res = None
 diff --git a/tests/gateway/test_busy_session_ack.py b/tests/gateway/test_busy_session_ack.py
-index f1562fa4ae..4fc21d8b90 100644
+index f1562fa4ae5..4fc21d8b903 100644
 --- a/tests/gateway/test_busy_session_ack.py
 +++ b/tests/gateway/test_busy_session_ack.py
 @@ -523,6 +523,7 @@ class TestLongRunningNotificationOwnership:
