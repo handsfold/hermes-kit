@@ -1,11 +1,11 @@
 ---
 name: cloud-cost-guard
-description: >-
-  Jamais scaler un job cloud sans 1-worker smoke test.
+description: "Garde-fous de cout cloud, verifier une depense AWS/GCP avant de lancer, alerter sur les pieges de facturation."
 version: 1.0.0
 metadata:
   hermes:
     tags: [cloud, modal, cout, batch, parallel]
+disable-model-invocation: true
 ---
 
 # Cloud Cost Guard

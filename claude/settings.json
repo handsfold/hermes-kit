@@ -1,13 +1,37 @@
 {
   "cleanupPeriodDays": 99999,
   "env": {
+    "CAVEMAN_DEFAULT_MODE": "caveman",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-haiku-5-5",
     "API_TIMEOUT_MS": "3000000",
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "150000"
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "150000",
+    "CLAUDE_CODE_TMPDIR": "/mnt/ssd-interne/tmp-claude",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_LOG_USER_PROMPTS": "0",
+    "OTEL_LOG_ASSISTANT_RESPONSES": "0",
+    "OTEL_LOG_TOOL_DETAILS": "0",
+    "OTEL_LOG_TOOL_CONTENT": "0",
+    "OTEL_LOG_RAW_API_BODIES": "0",
+    "OTEL_METRICS_INCLUDE_SESSION_ID": "true",
+    "OTEL_METRICS_INCLUDE_ACCOUNT_UUID": "false",
+    "OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES": "false",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:4318/v1/traces",
+    "OTEL_METRICS_INCLUDE_VERSION": "false",
+    "OTEL_METRICS_INCLUDE_REPOSITORY": "false"
   },
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
-  "model": "opus",
+  "model": "sonnet",
   "skillOverrides": {
     "opencli-adapter-author": "off",
     "find-skills": "off",
@@ -84,7 +108,6 @@
     "design-consultation": "off",
     "gstack-upgrade": "off",
     "seo-pilote": "off",
-    "update-all-skills": "off",
     "forget": "off",
     "claude-hud:setup": "off",
     "claude-hud:configure": "off",
@@ -124,13 +147,11 @@
     "claude-mem:smart-explore": "off",
     "token-optimizer:token-optimizer": "off",
     "cloud-cost-guard": "off",
-    "hermes-telegram-topics": "off",
     "patrimoine-thailande": "off",
     "retro-agent": "off",
     "parallel-scan-optimization": "off",
     "omi-local": "off",
     "bibliotheque": "off",
-    "pixel-pilotage": "off",
     "tinder-agent": "off",
     "wallet-entropy-audit": "off",
     "android-device-control": "off",
@@ -141,7 +162,17 @@
     "video-transcription": "off",
     "bitcoin-address-datasets": "off",
     "deal-hunting-phone": "off",
-    "agent-reach-hermes": "off"
+    "agent-reach-hermes": "off",
+    "claude-pousseur": "off",
+    "caveman:caveman-setup": "off",
+    "caveman:caveman-discover": "off",
+    "caveman:caveman-evidence-review": "off",
+    "caveman:caveman-manage": "off",
+    "caveman:caveman-optimize": "off",
+    "caveman:caveman-learn": "off",
+    "caveman:caveman-init": "off",
+    "anthropic-skills:docx": "off",
+    "anthropic-skills:xlsx": "off"
   },
   "hooks": {
     "PreToolUse": [
@@ -151,6 +182,11 @@
           {
             "type": "command",
             "command": "echo \"$TOOL_INPUT\" | grep -qiE '\"command\"\\s*:\\s*\"(git (push|commit|add)|pnpm (run )?build|npm run build|npx next build)' && $HOME/.claude/hooks/build-lock.sh acquire || true"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/fond-sans-pouls.py",
+            "timeout": 5
           }
         ]
       },
@@ -170,7 +206,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v rtk >/dev/null 2>&1 && rtk hook claude || true"
+            "command": "python3 $HOME/.claude/hooks/token-budget-pretool.py",
+            "timeout": 15
           }
         ]
       },
@@ -316,6 +353,26 @@
             "type": "command",
             "command": "python3 $HOME/.claude/hooks/controle-video.py",
             "timeout": 600
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/rebuild-stack.py",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/contexte-lourd.py",
+            "timeout": 5
           }
         ]
       }
@@ -486,6 +543,15 @@
             "command": "python3 $HOME/.claude/hooks/ouvert-ferme.py ferme"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/chasse-garde.sh",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -510,6 +576,15 @@
             "timeout": 5000,
             "statusMessage": "SubagentStop",
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/chasse-garde.sh",
+            "timeout": 60
           }
         ]
       }
@@ -782,7 +857,7 @@
     "github@claude-plugins-official": false,
     "supabase@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": true,
-    "claude-mem@thedotmack": true,
+    "claude-mem@thedotmack": false,
     "claude-hud@claude-hud": true,
     "posthog@claude-plugins-official": false,
     "vercel@claude-plugins-official": false,
@@ -791,9 +866,12 @@
     "digital-marketing-pro@local-marketing": false,
     "context7@claude-plugins-official": false,
     "svg-logo-designer@rknall-custom-skills": false,
-    "token-optimizer@alexgreensh-token-optimizer": true,
+    "token-optimizer@alexgreensh-token-optimizer": false,
     "you-should-know@builtin": true,
-    "hawk-seo@hawk-seo": false
+    "hawk-seo@hawk-seo": false,
+    "ribbon@robonuggets": true,
+    "caveman@caveman": true,
+    "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
     "supermemory-plugins": {
@@ -843,22 +921,41 @@
         "source": "directory",
         "path": "$HOME/Bureau/Projets/perso/outils/hawk-seo"
       }
+    },
+    "robonuggets": {
+      "source": {
+        "source": "github",
+        "repo": "robonuggets/ribbon"
+      }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
     }
   },
-  "outputStyle": "Clair",
+  "outputStyle": "default",
   "language": "French",
-  "effortLevel": "high",
+  "effortLevel": "medium",
   "modelSettings": {
     "claude-opus-4-8": {
       "effortLevel": "xhigh"
     },
     "claude-sonnet-5-5": {
-      "effortLevel": "xhigh"
+      "effortLevel": "low"
     }
   },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "verbose": false,
+  "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "autoMode": {
@@ -869,5 +966,13 @@
       "$defaults"
     ]
   },
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "pluginConfigs": {
+    "ponytail@ponytail": {
+      "options": {
+        "ledger": true,
+        "sendNames": true
+      }
+    }
+  }
 }

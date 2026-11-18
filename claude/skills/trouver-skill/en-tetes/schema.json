@@ -1,0 +1,11 @@
+{
+  "accroche": "Schema markup : donnees structurees JSON-LD pour Google.",
+  "fait": "Ajoute et verifie les donnees structurees JSON-LD : Product, FAQ, Organization, Breadcrumb.",
+  "pas_pour": "Pas pour la structure des URLs (voir site-architecture).",
+  "quand": "USER dit « schema », « JSON-LD », « rich snippets ». Aussi quand Google affiche mal les extraits du site.",
+  "motifs": [
+    "schema|json.?ld|snippet"
+  ],
+  "origine_sha": "62eba952568b15e0",
+  "date": "2026-11-04"
+}

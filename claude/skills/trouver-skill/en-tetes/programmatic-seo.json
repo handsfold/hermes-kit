@@ -1,0 +1,11 @@
+{
+  "accroche": "SEO programmatique : des pages ciblees a la chaine.",
+  "fait": "Concoit et genere des pages massives ciblees par motifs : templates, donnees, maillage entre pages.",
+  "pas_pour": "Pas pour la strategie de contenu editorial (voir content-strategy).",
+  "quand": "USER dit « pages a la chaine », « pSEO », « programmatique ». Aussi quand on veut couvrir des centaines de requetes.",
+  "motifs": [
+    "programmatic|pseo"
+  ],
+  "origine_sha": "c75f94c3746a0be2",
+  "date": "2026-11-04"
+}

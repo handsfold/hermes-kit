@@ -43,7 +43,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 CODE = (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".sh", ".bash", ".html",
-        ".css", ".service", ".timer", ".sql", ".go", ".rs", ".php")
+        ".css", ".service", ".timer", ".sql", ".go", ".rs", ".php", ".json", ".yaml", ".yml", ".toml")
 MODIFS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 # annonce de reussite, a la premiere personne ou au constat
 ANNONCE = re.compile(
@@ -212,6 +212,11 @@ def decision(texte, outils, resultats=None, demande=""):
     err, sortie = (resultats or {}).get(verifs[-1], (False, ""))
     if err or ECHEC.search(sortie or ""):
         return m.group(0), fichier, "echec"
+    # Un HTTP 200 vers une page de connexion ne prouve pas que le parcours métier fonctionne.
+    if re.search(r"\bHTTP\s*200\b", sortie or "", re.I) and re.search(
+            r"<title>[^<]*(?:connexion|login|sign in)[^<]*</title>|(?:connexion|login|sign in)\s+(?:required|page)",
+            sortie or "", re.I):
+        return m.group(0), fichier, "preuve_insuffisante"
     voulus = lieux(demande)
     if voulus:
         # le site peut etre vise par un script de test ecrit plus tot dans le tour,
@@ -257,6 +262,8 @@ def main():
                 f"modification de code ({base}). Redemarrer, compiler ou copier ne prouve rien.",
         "echec": f"ta derniere verification apres la modification de {base} a ECHOUE "
                  "(code de sortie, Traceback ou Parse error). Une verification plantee ne prouve rien.",
+        "preuve_insuffisante": "la reponse HTTP 200 correspond a une page de connexion, pas a la livraison du parcours metier. "
+                              "Teste le comportement utilisateur attendu ; un test explicite du login reste valable.",
         "contradiction": "tu ecris aussi que ce n'est pas verifie. USER lit la premiere phrase : "
                          "ne dis pas « regle » avant la preuve. Ecris « correctif pose, pas encore "
                          "verifie : <ce qui manque> », ou verifie d'abord.",
