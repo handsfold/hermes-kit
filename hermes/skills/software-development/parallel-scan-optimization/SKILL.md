@@ -1,6 +1,7 @@
 ---
 name: parallel-scan-optimization
 description: Scans paralleles massifs avec large dataset partage.
+disable-model-invocation: true
 ---
 
 Sommaire :
@@ -82,7 +83,7 @@ for pad in range(0, 10_000_000):
 
 **Regle :** si la hashmap tient en RAM (meme proche de la limite grace a COW), preferer la hashmap. Les faux positifs du bloom obligent a une verification secondaire qui coute du temps.
 
-Pour ~30M d'entrees : hashmap = ~1.5 GB pickle, bloom = ~45 MB. Avec 16 GB+ RAM, hashmap COW = viable.
+Pour ~30M d'entrees, hashmap = ~1.5 GB pickle, bloom = ~45 MB. Avec 16 GB+ RAM, hashmap COW = viable.
 
 ## GPU obligatoire pour les scans PBKDF2-bound
 
@@ -123,4 +124,4 @@ def get_txs(address: str, last_txid: str = None) -> list:
         return json.load(resp)
 ```
 
-Pour extraire les adresses entrantes d'une adresse de consolidation : iterer sur les pages de 25 txs, collecter `vin[].prevout.scriptpubkey_address`.
+Pour extraire les adresses entrantes d'une adresse de consolidation, iterer sur les pages de 25 txs, collecter `vin[].prevout.scriptpubkey_address`.

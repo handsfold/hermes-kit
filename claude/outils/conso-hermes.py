@@ -179,9 +179,17 @@ def main():
     par_skill, par_modele = defaultdict(Cumul), defaultdict(Cumul)
     outils = defaultdict(int)
     par_jour = defaultdict(Cumul)
+    # Appels sans topic : ce qui tourne sans geste de USER (timers, auxiliaires).
+    par_appelant = defaultdict(Cumul)
+    erreurs = defaultdict(int)
 
     for l in lignes:
         tot.ajoute(l)
+        if not l.get("topic"):
+            cle = f"{l['source']}:{l.get('appelant') or 'sans nom'}"
+            par_appelant[cle].ajoute(l)
+            if l.get("statut") == "erreur":
+                erreurs[cle] += 1
         par_source[l["source"]].ajoute(l)
         par_modele[f"{l.get('modele') or 'defaut'}/{l.get('effort') or 'defaut'}"].ajoute(l)
         par_jour[l["ts"][:10]].ajoute(l)
@@ -211,6 +219,12 @@ def main():
 
     tableau("Par source", par_source, tot.total, colonne="Source")
     tableau("Par topic", par_topic, tot.total, colonne="Topic")
+    if par_appelant:
+        tableau("Par appelant, hors topic (tourne sans geste de USER)", par_appelant, tot.total,
+                limite=30, colonne="Appelant")
+        if erreurs:
+            print("\n  Appels en erreur : " + "  ·  ".join(
+                f"{a} {n}" for a, n in sorted(erreurs.items(), key=lambda x: -x[1])[:12]))
     if par_cron:
         tableau("Par cron", par_cron, tot.total, colonne="Cron")
     if par_skill:

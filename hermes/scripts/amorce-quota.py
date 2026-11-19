@@ -181,7 +181,11 @@ def ping_claude():
     # --output-format json : usage-timer.py note la consommation du ping dans
     # proxy-usage.jsonl, attribuee au timer (cockpit, 2026-10-22).
     r = subprocess.run(
-        ["claude", "-p", "ok", "--model", "claude-haiku-5-5", "--output-format", "json"],
+        # Texte seul : sans outils, MCP ni fichiers d'instructions, le ping ouvre
+        # la fenetre pour ~1k tokens au lieu de ~34k ponderes (13/11/2026).
+        ["claude", "-p", "ok", "--model", "claude-haiku-5-5", "--output-format", "json",
+         "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+         "--mcp-config", '{"mcpServers":{}}'],
         cwd=BAC, capture_output=True, text=True, timeout=240)
     try:
         subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "usage-timer.py")],

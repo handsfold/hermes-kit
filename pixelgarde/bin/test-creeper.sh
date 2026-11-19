@@ -154,7 +154,7 @@ MENU="$ACTIONS/menu.txt"
 MANQUE=""
 # Deux niveaux depuis le 2026-10-01 : le quotidien dans menu.txt, le reste
 # dans reglages.txt, ouvert par la puce « reglages ».
-for id in voix bilan lirepresse voixmode masquer reglages; do
+for id in lirepresse voixmode masquer reglages; do
   grep -qE "^${id}:" "$MENU" || MANQUE="$MANQUE $id"
 done
 for id in lireecran rec; do

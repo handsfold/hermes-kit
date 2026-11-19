@@ -23,6 +23,7 @@ import urllib.parse
 import urllib.request
 
 DB = os.path.expanduser("~/.hermes/qg.db")
+STATE_DB = os.path.expanduser("~/.hermes/state.db")
 ERRLOG = os.path.expanduser("~/.hermes/logs/errors.log")
 ETAT = os.path.expanduser("~/.hermes/veilleur-etat.json")
 ENV = os.path.expanduser("~/.hermes/.env")
@@ -304,6 +305,25 @@ def a_repondu(sid, debut):
         return False
 
 
+def session_activity(sid):
+    """Dernier battement Hermes, y compris pendant un appel API sans outil."""
+    c = None
+    try:
+        c = sqlite3.connect(f"file:{STATE_DB}?mode=ro", uri=True, timeout=1)
+        row = c.execute(
+            "SELECT MAX(COALESCE(s.last_activity_at, 0), "
+            "COALESCE((SELECT MAX(m.timestamp) FROM messages m "
+            "WHERE m.session_id = s.id AND m.role IN ('assistant', 'tool')), 0)) "
+            "FROM sessions s WHERE s.id = ?",
+            (sid,)).fetchone()
+        return row[0] if row and row[0] else None
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+    finally:
+        if c is not None:
+            c.close()
+
+
 def tours_bloques(now, e_liens=None, vivants=None):
     """Un tour parti et jamais rendu.
 
@@ -350,6 +370,9 @@ def tours_bloques(now, e_liens=None, vivants=None):
                     c.execute(
                         "DELETE FROM tours_actifs WHERE session_id = ?", (sid,))
                     c.commit()
+                    continue
+                activite = session_activity(sid)
+                if activite and activite >= (debut or 0) and now - activite < SEUIL_MUET:
                     continue
                 if age >= SEUIL_MUET:
                     out.append((sid, age, None, debut))

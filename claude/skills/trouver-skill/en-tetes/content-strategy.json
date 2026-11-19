@@ -1,0 +1,11 @@
+{
+  "accroche": "Strategie de contenu : les sujets qui rapportent.",
+  "fait": "Planifie le contenu : mots-cles cibles, intentions de recherche, calendrier editorial, formats.",
+  "pas_pour": "Pas pour la redaction d'un article en particulier (voir content-research-writer).",
+  "quand": "USER dit « quels sujets ecrire », « strategie de contenu ». Aussi quand on veut plus de trafic organique.",
+  "motifs": [
+    "content.?strategy|sujets|editorial"
+  ],
+  "origine_sha": "1073907279c1291e",
+  "date": "2026-11-04"
+}
