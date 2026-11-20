@@ -13,7 +13,7 @@ Retouche: R12
  1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/gateway/run_turn.py b/gateway/run_turn.py
-index 6185359263..bc6a9bf950 100644
+index 61853592630..bc6a9bf950a 100644
 --- a/gateway/run_turn.py
 +++ b/gateway/run_turn.py
 @@ -3460,7 +3460,18 @@ class GatewayTurnMixin:

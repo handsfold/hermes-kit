@@ -1,0 +1,11 @@
+{
+  "accroche": "SEO audit : la liste des problemes d'un site.",
+  "fait": "Audite un site : technique, contenu, maillage, performances. Produit une liste de recommandations priorisees.",
+  "pas_pour": "Pas pour rediger du contenu (voir content-strategy).",
+  "quand": "USER dit « audit SEO », « quels problemes SEO ». Aussi avant de corriger le referencement d'un site.",
+  "motifs": [
+    "audit.*seo|seo.*audit"
+  ],
+  "origine_sha": "bd133c494d9c397d",
+  "date": "2026-11-04"
+}

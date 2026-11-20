@@ -10,7 +10,7 @@ N'ecrit au QG que si l'ecart a change depuis le dernier passage.
   4. Meme journal, 24 h : cout d'un tour incoherent avec ses tokens (plus cher que le plafond
      au tarif Opus le plus haut). Signe d'un cumul de session compte comme un tour.
      Ne le 2026-10-27 : 94 tours faux en 7 j, 5 357 $ affiches pour ~30 $ (server.js, deltaSession).
-Reparer : skill `mesure-partout`. Repérage : `sonde_mesure.py` (meme dossier).
+Reparer : skill `atelier` (guide mesure-partout). Repérage : `sonde_mesure.py` (meme dossier).
 
 Usage : controle-mesure.py [--sec]   (--sec : affiche sans deposer au QG)
 Sortie 1 s'il reste un ecart. Timer : controle-mesure.timer (systemd utilisateur), 8 h 30.
@@ -149,7 +149,7 @@ def main():
     if not ecarts:
         print("Aucun ecart." + ("\n" + "\n".join(infos) if infos else ""))
         return 0
-    texte = "\n\n".join(ecarts + infos) + "\n\nReparer : skill `mesure-partout`."
+    texte = "\n\n".join(ecarts + infos) + "\n\nReparer : skill `atelier` (guide mesure-partout)."
     print(texte)
     signature = hashlib.sha1("\n".join(ecarts).split(" sur ")[0].encode()).hexdigest()
     ancien = json.loads(ETAT.read_text()).get("signature") if ETAT.exists() else None

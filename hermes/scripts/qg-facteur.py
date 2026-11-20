@@ -53,14 +53,25 @@ def cx():
     return c
 
 
-def envoyer(texte):
+def thread_de(cible):
+    """67508 (QG cyber) si le rapport vient d'un topic cyber, sinon le QG."""
+    try:
+        d = json.load(open(os.path.expanduser("~/.hermes/topics_cyber.json")))
+        if (cible or "").rsplit(":", 1)[-1] in d.get("threads", []):
+            return str(d.get("qg") or THREAD)
+    except (OSError, ValueError):
+        pass
+    return THREAD
+
+
+def envoyer(texte, thread=None):
     jeton = env("TELEGRAM_BOT_TOKEN")
     if not jeton:
         print("pas de TELEGRAM_BOT_TOKEN", file=sys.stderr)
         return False
     data = urllib.parse.urlencode({
         "chat_id": CHAT,
-        "message_thread_id": THREAD,
+        "message_thread_id": thread or THREAD,
         "text": texte,
         "disable_web_page_preview": "true",
     }).encode()
@@ -153,7 +164,8 @@ def main():
         if not deja or deja["statut"] != "nouveau" or deja["notifie"]:
             continue
         nom = sujet_de(r["cible"])
-        if not envoyer("Rapport{}\n{}".format(" " + nom if nom else "", texte)[:4000]):
+        if not envoyer("Rapport{}\n{}".format(" " + nom if nom else "", texte)[:4000],
+                       thread_de(r["cible"])):
             echec_envoi = True
             break
         c.execute("UPDATE attente SET notifie = ? WHERE id = ?",

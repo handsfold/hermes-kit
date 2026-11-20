@@ -22,7 +22,7 @@ Retouche: R15
  create mode 100644 tests/gateway/test_telegram_effort.py
 
 diff --git a/gateway/run_turn.py b/gateway/run_turn.py
-index bc6a9bf950..268d28b24d 100644
+index bc6a9bf950a..268d28b24df 100644
 --- a/gateway/run_turn.py
 +++ b/gateway/run_turn.py
 @@ -1480,12 +1480,20 @@ class GatewayTurnMixin:
@@ -47,7 +47,7 @@ index bc6a9bf950..268d28b24d 100644
          except Exception as _footer_err:
              logger.debug("runtime_footer build failed: %s", _footer_err)
 diff --git a/gateway/runtime_footer.py b/gateway/runtime_footer.py
-index 090bdf0cc9..73b648e2d4 100644
+index 090bdf0cc9f..73b648e2d4d 100644
 --- a/gateway/runtime_footer.py
 +++ b/gateway/runtime_footer.py
 @@ -13,6 +13,7 @@ import os
@@ -100,7 +100,7 @@ index 090bdf0cc9..73b648e2d4 100644
 -                                 fields=cfg.get("fields") or _DEFAULT_FIELDS)
 +                                 effort=effort, fields=cfg.get("fields") or _DEFAULT_FIELDS)
 diff --git a/gateway/slash_commands_model.py b/gateway/slash_commands_model.py
-index da6a1d5d18..e6c520f258 100644
+index da6a1d5d18f..e6c520f2584 100644
 --- a/gateway/slash_commands_model.py
 +++ b/gateway/slash_commands_model.py
 @@ -354,12 +354,23 @@ class GatewayModelCommandsMixin:
@@ -129,7 +129,7 @@ index da6a1d5d18..e6c520f258 100644
          return bool(result.success)
  
 diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
-index 5df81ba880..c632317a42 100644
+index 5df81ba8800..c632317a423 100644
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
 @@ -3909,16 +3909,20 @@ class TelegramAdapter(BasePlatformAdapter):
@@ -321,7 +321,7 @@ index 5df81ba880..c632317a42 100644
          msg = self._effective_update_message(update)
 diff --git a/plugins/platforms/telegram/telegram_effort.py b/plugins/platforms/telegram/telegram_effort.py
 new file mode 100644
-index 0000000000..f5439b34f1
+index 00000000000..f5439b34f19
 --- /dev/null
 +++ b/plugins/platforms/telegram/telegram_effort.py
 @@ -0,0 +1,44 @@
@@ -371,7 +371,7 @@ index 0000000000..f5439b34f1
 +    return InlineKeyboardMarkup(rows)
 diff --git a/tests/gateway/test_telegram_effort.py b/tests/gateway/test_telegram_effort.py
 new file mode 100644
-index 0000000000..b698cea393
+index 00000000000..b698cea3934
 --- /dev/null
 +++ b/tests/gateway/test_telegram_effort.py
 @@ -0,0 +1,47 @@

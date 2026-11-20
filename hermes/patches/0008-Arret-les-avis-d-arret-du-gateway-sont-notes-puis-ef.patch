@@ -16,7 +16,7 @@ Retouche: R09
  1 file changed, 60 insertions(+), 6 deletions(-)
 
 diff --git a/gateway/run_shutdown.py b/gateway/run_shutdown.py
-index 52bf07449a..67be2c1073 100644
+index 52bf07449ac..67be2c10731 100644
 --- a/gateway/run_shutdown.py
 +++ b/gateway/run_shutdown.py
 @@ -144,6 +144,38 @@ def _notice_target_key(platform_value: str, chat_id, thread_id) -> tuple:

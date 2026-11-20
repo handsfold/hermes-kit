@@ -1,13 +1,14 @@
 ---
 name: video-transcription
-description: "Lien vidéo, transcris, résume-moi ça : lire sans voir. Lit une vidéo en ligne à partir de son lien, sans la regarder : titre, auteur, durée, description et transcription intégrale de la parole (Instagram Reel, TikTok, YouTube, Shorts, X, Facebook, Reddit, Twitch)."
+description: 'Lien vidéo, transcris, résume-moi ça, lire sans voir. Lit une vidéo en ligne à partir de son lien, sans la regarder, titre, auteur, durée'
 when_to_use: "Se déclenche dès qu'un lien vidéo est collé, ou que USER dit « transcris cette vidéo », « c'est quoi cette vidéo », « résume-moi ça », « qu'est-ce qu'il dit ». Pas pour analyser les images ni le montage (voir analyse-video)."
+disable-model-invocation: true
 ---
 
 # Transcrire une video depuis son lien
 
 Quand USER colle un lien video, meme sans consigne, **lance le script**. Un lien
-seul est une demande implicite : il veut pouvoir poser une question dessus.
+seul est une demande implicite, il veut pouvoir poser une question dessus.
 
 ## La commande
 

@@ -18,7 +18,7 @@ Retouche: R02
  4 files changed, 83 insertions(+), 3 deletions(-)
 
 diff --git a/gateway/run.py b/gateway/run.py
-index e91aade0b4..eb8b50a35c 100644
+index e91aade0b49..eb8b50a35cb 100644
 --- a/gateway/run.py
 +++ b/gateway/run.py
 @@ -3436,6 +3436,9 @@ class GatewayRunner(
@@ -87,7 +87,7 @@ index e91aade0b4..eb8b50a35c 100644
      should_exit_with_failure = property(lambda self: self._exit_with_failure)
      exit_reason = property(lambda self: self._exit_reason)
 diff --git a/gateway/run_agent_cache.py b/gateway/run_agent_cache.py
-index be24d79f3d..6fc2a98a66 100644
+index be24d79f3d0..6fc2a98a669 100644
 --- a/gateway/run_agent_cache.py
 +++ b/gateway/run_agent_cache.py
 @@ -349,6 +349,15 @@ class GatewayAgentCacheMixin:
@@ -120,7 +120,7 @@ index be24d79f3d..6fc2a98a66 100644
  
      def _clear_session_boundary_security_state(self, session_key: str) -> None:
 diff --git a/gateway/slash_commands_model.py b/gateway/slash_commands_model.py
-index 1491e62fb6..da6a1d5d18 100644
+index 1491e62fb67..da6a1d5d18f 100644
 --- a/gateway/slash_commands_model.py
 +++ b/gateway/slash_commands_model.py
 @@ -253,6 +253,13 @@ class GatewayModelCommandsMixin:
@@ -138,7 +138,7 @@ index 1491e62fb6..da6a1d5d18 100644
          if ctx.persist_global:
              try:
 diff --git a/tests/gateway/test_session_model_reset.py b/tests/gateway/test_session_model_reset.py
-index 40c2903bd8..d6b03f6cae 100644
+index 40c2903bd84..d6b03f6cae6 100644
 --- a/tests/gateway/test_session_model_reset.py
 +++ b/tests/gateway/test_session_model_reset.py
 @@ -1,4 +1,10 @@
