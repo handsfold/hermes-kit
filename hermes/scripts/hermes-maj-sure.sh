@@ -199,12 +199,10 @@ cmd_essai() {
   retard=$(g rev-list --count "$base..$CIBLE")
   n_commits=$(g rev-list --count --no-merges "$base..$SERIE")
 
-  # Suppression du worktree precedent (ce chemin seulement).
-  if g worktree list --porcelain | grep -qx "worktree $ESSAI_WT"; then
-    g worktree remove --force "$ESSAI_WT"
+  # Suppression du worktree precedent interdite : il peut contenir du travail.
+  if [ -e "$ESSAI_WT" ] || [ -L "$ESSAI_WT" ]; then
+    die "worktree d'essai deja present : conserver et examiner son contenu ; aucune suppression automatique"
   fi
-  g worktree prune
-  if [ -e "$ESSAI_WT" ]; then rm -rf -- "${ESSAI_WT:?}"; fi
   echo "==> worktree $ESSAI_WT sur $branche_essai a $CIBLE ($(g rev-parse --short=10 "$CIBLE"))"
   g worktree add -q -B "$branche_essai" "$ESSAI_WT" "$cible_sha"
 
@@ -486,7 +484,8 @@ cmd_bascule() {
       refuser "le dernier essai a $conflits conflit(s) non resolu(s) : basculer perdrait ces retouches"
     fi
     case "$tests_ligne" in
-      "Tests : ECHEC"*) refuser "les tests du dernier essai ont echoue" ;;
+      "Tests : OK ("*) ;;
+      *) refuser "tests absents, echoues ou non concluants : refaire un essai valide" ;;
     esac
     if ! g rev-parse --verify --quiet "refs/heads/$branche_essai" >/dev/null; then
       refuser "la branche d'essai $branche_essai n'existe plus"
@@ -507,7 +506,7 @@ cmd_bascule() {
   if etape "Instantane rapide de l'etat (comme hermes update, best effort)" \
       "$VENV_PY -c 'from hermes_cli.update_cmd_maint import _run_quick_snapshots; _run_quick_snapshots()'"; then
     (cd "$DEPOT" && "$VENV_PY" -c 'from hermes_cli.update_cmd_maint import _run_quick_snapshots; print(_run_quick_snapshots())') \
-      || echo "ATTENTION : instantane impossible, on continue (le tag git reste la garantie)"
+      || die "instantane impossible : bascule arretee avant le changement de code"
   fi
 
   if etape "Tag de retour avant-maj-$stamp sur HEAD (branche d'origine : ${branche_actuelle:-detachee})" \
@@ -538,7 +537,7 @@ cmd_bascule() {
   if etape "Migration de la config (non interactive)" \
       "$VENV_PY -c 'from hermes_cli.config import migrate_config; migrate_config(interactive=False, quiet=False)'"; then
     (cd "$DEPOT" && "$VENV_PY" -c 'from hermes_cli.config import migrate_config; print(migrate_config(interactive=False, quiet=False))') \
-      || echo "ATTENTION : migration de config echouee, a relancer : hermes config migrate"
+      || die "migration de config echouee : pas de synchro ni de redemarrage"
   fi
 
   # La migration a deja remis display.personality a vide une fois : on remet les
@@ -547,13 +546,13 @@ cmd_bascule() {
       "hermes-reglages.py appliquer config.yaml reglages-proteges.yaml --avant $config_avant"; then
     "$SCRIPTS/hermes-reglages.py" appliquer $HOME/.hermes/config.yaml "$MAJ_DIR/reglages-proteges.yaml" \
       --avant "$config_avant" \
-      || echo "ATTENTION : reglages proteges non reappliques, a faire a la main (voir $config_avant)"
+      || die "reglages proteges non reappliques : pas de redemarrage (voir $config_avant)"
   fi
 
   if etape "Synchro des skills embarquees (comme hermes update)" \
       "$VENV_PY -c 'from tools.skills_sync import sync_skills; sync_skills(quiet=True)'"; then
     (cd "$DEPOT" && "$VENV_PY" -c 'from tools.skills_sync import sync_skills; print(sync_skills(quiet=True))') \
-      || echo "ATTENTION : synchro des skills echouee, non bloquant"
+      || die "synchro des skills echouee : pas de redemarrage"
   fi
 
   etape_greffes
@@ -628,6 +627,17 @@ cmd_retour() {
 }
 
 # --- aiguillage ---------------------------------------------------------------
+# Le gateway utilise des environnements geres par PM, pas DEPOT/venv.
+# Cette ancienne procedure installerait dans le mauvais environnement et ferait
+# croire a une livraison. Aucun bypass, meme a blanc : refaire l'essai isole et
+# son trajet PM avant de reautoriser ces trois sous-commandes.
+case "$SOUS" in
+  essai|bascule|retour)
+    if [ -e "$DEPOT/.hermes/bin/hermes" ]; then
+      die "installation geree detectee : ancienne procedure venv incompatible. Mise a jour bloquee avant toute ecriture ; sauvegarde et restauration isolee requises, puis essai avec le gestionnaire PM. Aucun redemarrage lance."
+    fi
+    ;;
+esac
 case "$SOUS" in
   etat)    cmd_etat ;;
   essai)   cmd_essai ;;

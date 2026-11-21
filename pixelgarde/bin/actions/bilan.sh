@@ -21,7 +21,7 @@ PY="$HA/venv/bin/python"
 ENV="$HOME/.hermes/.env"
 CHAT="__QG_CHAT__"
 THREAD="2923"
-VOIX_TTS="fr-FR-RemyMultilingualNeural"
+VOIX_TTS="$("$HOME/.hermes/scripts/qg-config.py" get voix)"
 DEBIT="+8%"
 LIMITE_TTS=1400
 

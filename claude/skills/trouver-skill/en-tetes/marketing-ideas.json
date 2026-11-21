@@ -1,0 +1,14 @@
+{
+  "accroche": "Idées de croissance : trouve des tests marketing.",
+  "fait": "Propose des idées marketing adaptées au produit, au stade et aux moyens, puis classe les essais par impact et effort. Pour ProjetA, logiciels et services numériques. Pas pour exécuter une campagne déjà choisie (voir marketing).",
+  "pas_pour": "Pas pour la stratégie ou l'exécution d'une campagne MARQUE-E (voir marketing), ni pour coder une campagne (voir construire).",
+  "quand": "USER dit « idées de croissance pour ProjetA », « quoi tester pour attirer des clients à un logiciel ? », « quel canal tester pour une offre numérique ? ». Aussi quand USER cherche des pistes d'acquisition pour ProjetA ou un logiciel.",
+  "motifs": [
+    "(?i)\\bProjetA\\b.{0,50}\\b(?:idées?|pistes?|croissance|acquisition|clients?|canal|tester|essayer)\\b",
+    "(?i)\\b(?:ProjetA|SaaS|logiciel|service numérique|offre numérique)\\b.{0,50}\\b(?:idées?|pistes?|croissance|acquisition|clients?|canal|tester|essayer)\\b",
+    "(?i)\\b(?:idées?|pistes?|croissance|acquisition)\\b.{0,50}\\b(?:ProjetA|SaaS|logiciel|service numérique)\\b",
+    "(?i)\\b(?:quoi|que)\\s+(?:tester|essayer|tenter)\\b.{0,50}\\b(?:ProjetA|SaaS|logiciel|produit numérique)\\b"
+  ],
+  "origine_sha": "f29e650d7a91d2bd",
+  "date": "2026-11-21"
+}

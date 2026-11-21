@@ -44,7 +44,7 @@ PY="$HA/venv/bin/python"
 ENV="$HOME/.hermes/.env"
 CHAT="__QG_CHAT__"
 THREAD="2923"
-VOIX_TTS="fr-FR-RemyMultilingualNeural"
+VOIX_TTS="$("$HOME/.hermes/scripts/qg-config.py" get voix)"
 DEBIT="+8%"
 # Au-dela, la synthese dure plus longtemps que l'attention de qui ecoute. Le
 # texte complet part sur Telegram : la voix n'est pas la seule copie.

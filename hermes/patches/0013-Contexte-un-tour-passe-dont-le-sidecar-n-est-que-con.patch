@@ -16,7 +16,7 @@ Retouche: R20
  3 files changed, 70 insertions(+), 7 deletions(-)
 
 diff --git a/agent/turn_context.py b/agent/turn_context.py
-index 27fe703a9b..cda5407df3 100644
+index 27fe703a9b8..cda5407df38 100644
 --- a/agent/turn_context.py
 +++ b/agent/turn_context.py
 @@ -9,6 +9,7 @@ returns a ``TurnContext`` with only the locals the loop reads back.
@@ -73,7 +73,7 @@ index 27fe703a9b..cda5407df3 100644
          # Pass reasoning back to the API for ALL assistant messages so multi-turn
          # reasoning context is preserved.
 diff --git a/tests/agent/test_api_content_sidecar.py b/tests/agent/test_api_content_sidecar.py
-index 2f65df5c1b..66b94ef65b 100644
+index 2f65df5c1be..66b94ef65ba 100644
 --- a/tests/agent/test_api_content_sidecar.py
 +++ b/tests/agent/test_api_content_sidecar.py
 @@ -516,16 +516,17 @@ class TestWireInvariant:
@@ -140,7 +140,7 @@ index 2f65df5c1b..66b94ef65b 100644
  # ---------------------------------------------------------------------------
  # Review fixes: re-anchoring, MoA, in-place compaction backfill, override
 diff --git a/tests/agent/test_replay_cleanup.py b/tests/agent/test_replay_cleanup.py
-index f97acaff9e..4b4e5e945e 100644
+index f97acaff9eb..4b4e5e945e5 100644
 --- a/tests/agent/test_replay_cleanup.py
 +++ b/tests/agent/test_replay_cleanup.py
 @@ -161,13 +161,18 @@ def test_send_wire_matches_replay_wire_after_db_round_trip(tmp_path):

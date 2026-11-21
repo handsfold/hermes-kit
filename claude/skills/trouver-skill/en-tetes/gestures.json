@@ -1,0 +1,14 @@
+{
+  "accroche": "Glisser, swipe, tiroir : code un geste fluide.",
+  "fait": "La skill construit des gestes tactiles qui suivent le doigt, restent interruptibles et se terminent avec une physique cohérente.",
+  "pas_pour": "Pas pour choisir une bibliothèque (voir pick-ui-library) ni diagnostiquer les images perdues (voir animation-performance).",
+  "quand": "USER dit « ajoute un swipe », « fais glisser la carte », « le tiroir suit mal le doigt ». Aussi quand un geste saute au relâchement ou bloque le défilement.",
+  "motifs": [
+    "(?i)(ajoute|crée|construis|code|corrige|fais|fait).{0,30}(swipe|drag|balay|geste|gliss|tiroir|drawer|sheet)",
+    "(?i)(swipe|drag|balay|gliss|geste|gesture|tiroir|drawer|sheet|snap.?point|vaul|pull.?to.?refresh|hold.?to.?confirm|hold.?to.?delete).{0,35}(carte|toasta?|tiroir|drawer|sheet|doigt|bouton|menu|interromp|relâch|saccad|bloque|défilement|dismiss|ferme|supprime|reorder|réordonne)",
+    "(?i)(carte|toast|tiroir|drawer|sheet|geste|gesture).{0,30}(suit|saute|traîne|interromp|doigt|gliss|drag|swipe|balay|bloque|défilement|dismiss|reorder|réordonne|jump|jumps|release|relâch)"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "cef77831fcb36150",
+  "date": "2026-11-21"
+}

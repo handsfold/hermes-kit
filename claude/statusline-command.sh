@@ -124,9 +124,12 @@ hud_out=""
 if [ -f "$hud" ] && command -v node >/dev/null 2>&1; then
   hud_out=$(printf '%s' "$input" | COLUMNS="${COLUMNS:-120}" node "$hud" 2>/dev/null)
 fi
+# Métriques de session ajoutées sous la barre HUD (modèle, contexte %, tokens,
+# coût API équivalent). Option --tokens : rendu texte seul, sans tmux ni nommage.
+tokens_out=$(printf '%s' "$input" | python3 "$HOME/.claude/statusline-tokens.py" 2>/dev/null)
 
 if [ -n "$hud_out" ]; then
-  printf '%s' "$hud_out"
+  printf '%s\n%s' "$hud_out" "$tokens_out"
 else
   # couleur par modèle : Fable=magenta, Opus=orange, Sonnet=cyan, Haiku=vert
   case "$model" in

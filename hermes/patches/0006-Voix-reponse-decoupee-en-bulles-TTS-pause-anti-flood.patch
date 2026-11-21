@@ -21,7 +21,7 @@ Retouche: R07
  create mode 100644 gateway/voice_delivery.py
 
 diff --git a/cron/scheduler_delivery.py b/cron/scheduler_delivery.py
-index 90c02b331c..e7be279cb5 100644
+index 90c02b331c0..e7be279cb5a 100644
 --- a/cron/scheduler_delivery.py
 +++ b/cron/scheduler_delivery.py
 @@ -12,6 +12,7 @@ import asyncio
@@ -118,7 +118,7 @@ index 90c02b331c..e7be279cb5 100644
      # Filter-time drops apply to every target; report them once.
      delivery_errors.extend(policy_drop_errors)
 diff --git a/gateway/run_voice.py b/gateway/run_voice.py
-index a5b993243a..d5e7b3ff79 100644
+index a5b993243a0..d5e7b3ff79f 100644
 --- a/gateway/run_voice.py
 +++ b/gateway/run_voice.py
 @@ -367,6 +367,14 @@ class GatewayVoiceMixin:
@@ -140,7 +140,7 @@ index a5b993243a..d5e7b3ff79 100644
                               metadata=thread_meta)
 diff --git a/gateway/voice_delivery.py b/gateway/voice_delivery.py
 new file mode 100644
-index 0000000000..a4ac610107
+index 00000000000..a4ac6101078
 --- /dev/null
 +++ b/gateway/voice_delivery.py
 @@ -0,0 +1,225 @@
@@ -370,7 +370,7 @@ index 0000000000..a4ac610107
 +        except OSError:
 +            pass
 diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
-index d81cd696f9..5df81ba880 100644
+index d81cd696f92..5df81ba8800 100644
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
 @@ -4797,10 +4797,61 @@ class TelegramAdapter(BasePlatformAdapter):

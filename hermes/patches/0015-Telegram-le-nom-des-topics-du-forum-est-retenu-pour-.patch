@@ -16,7 +16,7 @@ Retouche: R17
  2 files changed, 87 insertions(+)
 
 diff --git a/gateway/run_topics.py b/gateway/run_topics.py
-index 05b6abf70a..bc01f90edb 100644
+index 05b6abf70ab..bc01f90edb9 100644
 --- a/gateway/run_topics.py
 +++ b/gateway/run_topics.py
 @@ -541,6 +541,11 @@ class GatewayTopicThreadsMixin:
@@ -32,7 +32,7 @@ index 05b6abf70a..bc01f90edb 100644
              logger.debug("Failed to rename Telegram topic for auto-generated title", exc_info=True)
  
 diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
-index c632317a42..488d04fa5b 100644
+index c632317a423..488d04fa5b5 100644
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
 @@ -2740,6 +2740,12 @@ class TelegramAdapter(BasePlatformAdapter):
