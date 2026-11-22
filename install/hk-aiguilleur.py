@@ -134,7 +134,8 @@ def skills():
             except OSError:
                 continue
             nom = str(meta.get("name") or f.parent.name)
-            if nom in out or (i == 0 and nom in off):
+            # Skills désactivées restent trouvables ici (retirées du prompt seulement), 2026-11-23.
+            if nom in out:
                 continue
             desc = " ".join(str(meta.get("description") or "").split())
             when = " ".join(str(meta.get("when_to_use") or "").split())
@@ -703,7 +704,45 @@ def requete(texte, precedent=""):
     return f"{tete}1. {texte[:600]}"
 
 
+_TRACE_HTTP_RESTANT = {400: 12, 429: 4}
+
+
+def diagnostic_http(exc):
+    """Temporary error trace: keep response labels, never its message or request body."""
+    import urllib.error
+
+    if not isinstance(exc, urllib.error.HTTPError):
+        return None
+    restant = _TRACE_HTTP_RESTANT.get(exc.code, 0)
+    if not restant:
+        return None
+    _TRACE_HTTP_RESTANT[exc.code] = restant - 1
+    try:
+        payload = json.loads(exc.read(8192).decode("utf-8", "replace"))
+    except (OSError, ValueError):
+        payload = {}
+    error = payload.get("error", {}) if isinstance(payload, dict) else {}
+    if not isinstance(error, dict):
+        error = {}
+    safe = lambda v: str(v) if isinstance(v, (str, int)) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(v)) else "-"
+    message = str(error.get("message") or payload.get("message") or "") if isinstance(payload, dict) else ""
+    classes = {
+        "invalid": r"invalid|malformed|required|missing|must be",
+        "model": r"\bmodel\b",
+        "messages": r"\bmessages?\b",
+        "max_tokens": r"max[_ ]tokens?",
+        "quota": r"rate.?limit|quota|credit|exhausted|too many requests",
+        "auth": r"unauthori[sz]ed|forbidden|credential|api key",
+        "capacity": r"overload|capacity|busy|temporarily unavailable",
+    }
+    flags = ",".join(name for name, pattern in classes.items() if re.search(pattern, message, re.I)) or "-"
+    detail = f"type={safe(error.get('type') or payload.get('type') if isinstance(payload, dict) else '')}"
+    detail += f" code={safe(error.get('code'))} param={safe(error.get('param'))} flags={flags}"
+    return detail
+
+
 def appel_llm(systeme, texte, max_tokens=1200, timeout=300):
+    import urllib.error
     import urllib.request
 
     corps = json.dumps(
@@ -725,8 +764,14 @@ def appel_llm(systeme, texte, max_tokens=1200, timeout=300):
         },
     )
     t0 = time.time()
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (meme URL que plus haut)
-        rep = json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (meme URL que plus haut)
+            rep = json.loads(r.read())
+    except urllib.error.HTTPError as exc:
+        detail = diagnostic_http(exc)
+        if detail:
+            raise RuntimeError(f"HTTPError: {exc.code} [trace {detail}]") from None
+        raise
     txt = "".join(b.get("text", "") for b in rep.get("content", []) if b.get("type") == "text")
     return txt, rep.get("usage", {}), time.time() - t0
 
