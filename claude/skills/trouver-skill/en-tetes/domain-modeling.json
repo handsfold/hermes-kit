@@ -1,0 +1,12 @@
+{
+  "accroche": "Construire et préciser le modèle de domaine.",
+  "fait": "Construit et précise le modèle de domaine, le vocabulaire, le glossaire et les ADR du projet.",
+  "pas_pour": "Pas pour documenter une décision sans lien au domaine du projet ; (voir trouver-skill)",
+  "quand": "USER dit « /domain-modeling » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/domain\\-modeling(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "068ecc24e6ba590f",
+  "date": "2026-11-21"
+}

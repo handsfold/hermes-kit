@@ -1,0 +1,12 @@
+{
+  "accroche": "Publicité : textes et créations.",
+  "fait": "Rédige et évalue les créations publicitaires, accroches, textes et variantes.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /ad-creative » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/ad\\-creative(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "d265d81297fe17da",
+  "date": "2026-11-21"
+}

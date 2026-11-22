@@ -1,0 +1,12 @@
+{
+  "accroche": "Aide à intégrer et dépanner Sonner.",
+  "fait": "Explique l’installation, l’usage, le style et le dépannage des toasts Sonner.",
+  "pas_pour": "Pas pour une bibliothèque de toasts autre que Sonner (voir trouver-skill).",
+  "quand": "USER dit « /ask-sonner » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/ask\\-sonner(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "fa2ffa42301b7350",
+  "date": "2026-11-21"
+}

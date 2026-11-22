@@ -1,0 +1,12 @@
+{
+  "accroche": "Repère où une interface gagnerait à bouger.",
+  "fait": "Recherche les occasions pertinentes d’ajouter du mouvement, sans implémenter.",
+  "pas_pour": "Pas pour corriger ou implémenter des animations existantes (voir trouver-skill).",
+  "quand": "USER dit « /find-animation-opportunities » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/find\\-animation\\-opportunities(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "6dd45aae66443c7e",
+  "date": "2026-11-21"
+}

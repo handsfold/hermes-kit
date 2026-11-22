@@ -1,0 +1,12 @@
+{
+  "accroche": "Lancement : produits et fonctionnalités.",
+  "fait": "Planifie le lancement d’un produit ou d’une fonctionnalité, de la préparation à l’annonce.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /launch » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/launch(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "038716765a745614",
+  "date": "2026-11-21"
+}

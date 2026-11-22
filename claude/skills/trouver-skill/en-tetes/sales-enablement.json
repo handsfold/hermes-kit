@@ -1,0 +1,12 @@
+{
+  "accroche": "Ventes : supports et argumentaires.",
+  "fait": "Produit des supports commerciaux et prépare les réponses aux objections et argumentaires.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /sales-enablement » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/sales\\-enablement(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "e4518289608d93cf",
+  "date": "2026-11-21"
+}

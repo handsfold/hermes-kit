@@ -1,0 +1,14 @@
+{
+  "accroche": "Animation saccadée : trouve la cause des images perdues.",
+  "fait": "La skill diagnostique les saccades web, repère le coût par image et propose une correction vérifiable sur le code et l’appareil réel.",
+  "pas_pour": "Pas pour décider si l’animation sert l’interface ni choisir sa courbe (voir animate).",
+  "quand": "USER dit « l’animation saccade », « le menu perd des images », « ça saccade quand le menu bouge », « faut-il mettre will-change ? ». Aussi quand une animation web perd des images ou ralentit pendant son exécution.",
+  "motifs": [
+    "(?i)(animation|motion|menu|tiroir|transition).{0,35}(rame|saccad|jank|perd.{0,12}image|fps|dropped frame|frame drop|stutter|lag)",
+    "(?i)(?:will-change|frame budget|dropped frames|frame rate)",
+    "(?i)(rame|saccad|jank|stutter|lag).{0,35}(animation|motion|menu|tiroir|transition|frame|fps)"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "17ceb570db0f1091",
+  "date": "2026-11-21"
+}

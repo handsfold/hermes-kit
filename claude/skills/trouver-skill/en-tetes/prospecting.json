@@ -1,0 +1,12 @@
+{
+  "accroche": "Prospection : trouver et qualifier des clients.",
+  "fait": "Repère et qualifie des prospects sortants à partir des signaux d’achat et de recherches de comptes.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /prospecting » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/prospecting(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "f1759fb5f8f5c70f",
+  "date": "2026-11-21"
+}

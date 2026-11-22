@@ -1,0 +1,12 @@
+{
+  "accroche": "Publicité : campagnes payantes.",
+  "fait": "Planifie, pilote et diagnostique les publicités payantes sur Google, Meta et LinkedIn.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /ads » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/ads(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "a0d010dc8c6ec2ea",
+  "date": "2026-11-21"
+}

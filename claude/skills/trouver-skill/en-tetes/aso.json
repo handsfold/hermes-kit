@@ -1,0 +1,12 @@
+{
+  "accroche": "App stores : optimiser les fiches.",
+  "fait": "Audite et optimise les fiches App Store et Google Play, titres, mots-clés et captures.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /aso » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/aso(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "b7977e576a1b3fcb",
+  "date": "2026-11-21"
+}

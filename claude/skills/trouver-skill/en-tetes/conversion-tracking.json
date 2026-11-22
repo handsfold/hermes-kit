@@ -1,0 +1,12 @@
+{
+  "accroche": "Conversions : configurer le suivi.",
+  "fait": "Configure et dépanne le suivi des conversions sur plateformes publicitaires et analytiques.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /conversion-tracking » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/conversion\\-tracking(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "d5748daf25eefbcf",
+  "date": "2026-11-21"
+}

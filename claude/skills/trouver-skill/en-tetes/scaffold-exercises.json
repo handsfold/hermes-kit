@@ -1,0 +1,12 @@
+{
+  "accroche": "Créer la structure de dossiers d’exercices lintée.",
+  "fait": "Crée des structures d’exercices avec sections, problèmes, solutions et explications qui passent le lint.",
+  "pas_pour": "Pas pour écrire un cours sans créer sa structure d’exercices ; (voir trouver-skill)",
+  "quand": "USER dit « /scaffold-exercises » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/scaffold\\-exercises(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "8a71b80b74e3efb5",
+  "date": "2026-11-21"
+}

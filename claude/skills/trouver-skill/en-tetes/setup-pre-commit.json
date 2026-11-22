@@ -1,0 +1,12 @@
+{
+  "accroche": "Configurer les hooks pre-commit Husky du dépôt.",
+  "fait": "Configure Husky et lint-staged pour formatter, vérifier les types et lancer les tests au commit.",
+  "pas_pour": "Pas pour lancer une vérification ponctuelle sans configurer les hooks ; (voir trouver-skill)",
+  "quand": "USER dit « /setup-pre-commit » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/setup\\-pre\\-commit(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "7b17b0fff7eeb470",
+  "date": "2026-11-21"
+}

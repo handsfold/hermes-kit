@@ -14,7 +14,7 @@ Retouche: R04
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/hermes_cli/model_switch.py b/hermes_cli/model_switch.py
-index e019505746..619247aaeb 100644
+index e019505746b..619247aaeb1 100644
 --- a/hermes_cli/model_switch.py
 +++ b/hermes_cli/model_switch.py
 @@ -857,8 +857,12 @@ def _configured_provider_matches(

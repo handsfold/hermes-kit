@@ -1,0 +1,12 @@
+{
+  "accroche": "Oriente vers la skill ou le flux adapté.",
+  "fait": "Aiguille vers la compétence ou le flux adapté à la situation.",
+  "pas_pour": "Pas pour exécuter une tâche spécialisée (voir trouver-skill).",
+  "quand": "USER dit « /ask-emil » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/ask\\-emil(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "b043bdcdd27cb361",
+  "date": "2026-11-21"
+}

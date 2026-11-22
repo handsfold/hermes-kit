@@ -1,0 +1,12 @@
+{
+  "accroche": "Interroger pour éprouver une idée ou décision.",
+  "fait": "Interroge rigoureusement sur un plan, une décision ou une idée pour en éprouver la solidité.",
+  "pas_pour": "Pas pour rédiger directement une spécification sans entretien ; (voir trouver-skill)",
+  "quand": "USER dit « /grilling » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/grilling(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "170c4c5d5e1cc93a",
+  "date": "2026-11-21"
+}

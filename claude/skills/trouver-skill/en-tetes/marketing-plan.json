@@ -1,0 +1,12 @@
+{
+  "accroche": "Marketing : plan et priorités.",
+  "fait": "Construit un plan marketing ou go-to-market en priorisant canaux, budget, équipe et objectifs.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /marketing-plan » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/marketing\\-plan(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "025ae7a6b1718fe1",
+  "date": "2026-11-21"
+}

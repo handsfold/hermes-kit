@@ -1,0 +1,12 @@
+{
+  "accroche": "Applique la philosophie design-engineering d’Emil.",
+  "fait": "Guide le soin des composants, interactions et détails d’interface.",
+  "pas_pour": "Pas pour une tâche couverte par une skill plus ciblée (voir trouver-skill).",
+  "quand": "USER dit « /emil-design-eng » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/emil\\-design\\-eng(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "587936b0f2d898c2",
+  "date": "2026-11-21"
+}

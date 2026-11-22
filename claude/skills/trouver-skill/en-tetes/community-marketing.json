@@ -1,0 +1,12 @@
+{
+  "accroche": "Communauté : participation et croissance.",
+  "fait": "Développe une communauté en ligne, sa participation, ses défenseurs et sa croissance.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /community-marketing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/community\\-marketing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "07d1da5e16dfd30f",
+  "date": "2026-11-21"
+}

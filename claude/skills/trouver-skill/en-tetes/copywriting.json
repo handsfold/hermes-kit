@@ -1,0 +1,12 @@
+{
+  "accroche": "Rédaction : textes de pages marketing.",
+  "fait": "Rédige ou révise les textes de pages marketing et leurs promesses, titres et messages.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /copywriting » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/copywriting(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "671b72bf449663d5",
+  "date": "2026-11-21"
+}

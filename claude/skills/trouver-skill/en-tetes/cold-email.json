@@ -1,0 +1,12 @@
+{
+  "accroche": "Email B2B : prospection sortante.",
+  "fait": "Aide à rédiger et piloter la prospection B2B par email, ses relances, domaines et cadences.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /cold-email » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/cold\\-email(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "062418efca22aa5d",
+  "date": "2026-11-21"
+}

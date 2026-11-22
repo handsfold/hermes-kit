@@ -1,0 +1,17 @@
+{
+  "accroche": "Bibliothèque UI : choisis l’outil adapté.",
+  "fait": "La skill recommande une bibliothèque front-end depuis une liste ciblée, après contrôle du projet.",
+  "pas_pour": "Pas pour cadrer une interface entière (voir construire).",
+  "quand": "USER dit « quelle bibliothèque prendre ? », « quoi utiliser pour les notifications ? ». Aussi quand une tâche front-end demande le choix d’un composant ou d’un outil.",
+  "motifs": [
+    "(?i)\\bchoisir une bibliothèque\\b",
+    "(?i)quel(?:le)? (?:bibliothèque|librairie).{0,30}(?:prendre|choisir|utiliser|recommander|pour)\\b",
+    "(?i)\\bbibliothèque UI\\b",
+    "(?i)\\bcomposant UI\\b",
+    "(?i)(?:quoi utiliser|quel(?:le)? outil).{0,30}(?:toasts?|notifications?|menus?|composants?)|(?:toasts?|notifications?).{0,30}(?:bibliothèque|composant|choisir|utiliser|installer)",
+    "(?i)(?:choisir|quel(?:le)?|quoi|bibliothèque|composant).{0,30}drag and drop|drag and drop.{0,30}(?:bibliothèque|composant|choisir|utiliser)"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "a3d58821d01c5462",
+  "date": "2026-11-21"
+}

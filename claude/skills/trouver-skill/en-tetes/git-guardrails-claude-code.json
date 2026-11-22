@@ -1,0 +1,12 @@
+{
+  "accroche": "Bloquer les commandes git dangereuses dans Claude Code.",
+  "fait": "Configure des hooks Claude Code pour bloquer les commandes Git dangereuses avant leur exécution.",
+  "pas_pour": "Pas pour ajouter des protections à un autre agent de code ; (voir trouver-skill)",
+  "quand": "USER dit « /git-guardrails-claude-code » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/git\\-guardrails\\-claude\\-code(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "63b55e21b36dc574",
+  "date": "2026-11-21"
+}

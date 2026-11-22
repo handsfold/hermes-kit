@@ -1,0 +1,12 @@
+{
+  "accroche": "Liens : backlinks et mentions.",
+  "fait": "Développe les backlinks et mentions, et évalue les tactiques de création de liens et leurs risques.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /link-building » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/link\\-building(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "0bb38a23bf564d57",
+  "date": "2026-11-21"
+}

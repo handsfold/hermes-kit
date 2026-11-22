@@ -1,0 +1,13 @@
+{
+  "accroche": "Tarifs SaaS : fixe prix et niveaux d’offre.",
+  "fait": "Aide à fixer prix, métrique et niveaux d’offre pour un logiciel ou un abonnement, selon sa valeur et les retours clients.",
+  "pas_pour": "Pas pour le prix d'un cosmétique ou d'un produit physique (voir marketing).",
+  "quand": "USER dit « quel prix pour ProjetA ? », « comment structurer l’abonnement ? », « faut-il augmenter le tarif SaaS ? ». Aussi quand il fixe le prix d’un logiciel ou d’un service par abonnement. Pas pour MARQUE-E ou les produits physiques.",
+  "motifs": [
+    "(?i)\\b(?:ProjetA|SaaS|logiciel|abonnement)\\b.{0,40}\\b(?:prix|tarif|pricing|tiers?|niveaux?|offre|augment|factur)\\w*\\b",
+    "(?i)\\b(?:quel|combien|comment|faut-il)\\b.{0,20}\\b(?:prix|tarif|pricing|facturer|abonnement)\\b.{0,40}\\b(?:ProjetA|SaaS|logiciel|abonnement)\\b",
+    "(?i)\\b(?:tarifs?|pricing|pricing page)\\b.{0,25}\\b(?:ProjetA|SaaS|logiciel|abonnement)\\b"
+  ],
+  "origine_sha": "4e3ff18e5922fa45",
+  "date": "2026-11-21"
+}

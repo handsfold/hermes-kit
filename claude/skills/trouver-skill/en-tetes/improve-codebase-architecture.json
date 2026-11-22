@@ -1,0 +1,12 @@
+{
+  "accroche": "Repérer les pistes d’amélioration d’architecture.",
+  "fait": "Analyse une base de code, présente les pistes d’approfondissement dans un rapport HTML visuel, puis examine la piste choisie.",
+  "pas_pour": "Pas pour concevoir l’interface d’un seul module ; (voir trouver-skill)",
+  "quand": "USER dit « /improve-codebase-architecture » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/improve\\-codebase\\-architecture(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "8dba6fe3f8b2fead",
+  "date": "2026-11-21"
+}

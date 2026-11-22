@@ -1,13 +1,14 @@
 ---
 name: wallet-entropy-audit
 description: Auditer l'entropie des hardware wallets Bitcoin.
+disable-model-invocation: true
 ---
 
 # Wallet Entropy Audit
 
 ## Classe de bug
 
-Le pattern Coldcard : un fallback RNG logiciel déterministe (Yasmarang MicroPython) qui
+Le pattern Coldcard, un fallback RNG logiciel déterministe (Yasmarang MicroPython) qui
 remplace silencieusement le TRNG hardware à cause d'une erreur de build (`#ifndef` au
 lieu de `#if`).
 

@@ -1,0 +1,12 @@
+{
+  "accroche": "Paiement : écrans in-app.",
+  "fait": "Conçoit ou améliore les écrans de paiement et moments de proposition d’abonnement dans une application.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /paywalls » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/paywalls(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "8e0e29bf5098ceb0",
+  "date": "2026-11-21"
+}

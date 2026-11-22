@@ -1,0 +1,12 @@
+{
+  "accroche": "Rechercher dans des sources fiables et consigner.",
+  "fait": "Étudie une question à partir de sources primaires fiables et consigne les résultats dans un fichier Markdown du dépôt.",
+  "pas_pour": "Pas pour une réponse qui ne nécessite ni recherche ni sources ; (voir trouver-skill)",
+  "quand": "USER dit « /research » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/research(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "48ccc1d2d9ec7c65",
+  "date": "2026-11-21"
+}

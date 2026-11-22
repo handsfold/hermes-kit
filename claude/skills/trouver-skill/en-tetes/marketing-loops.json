@@ -1,0 +1,12 @@
+{
+  "accroche": "Marketing : tâches récurrentes automatisées.",
+  "fait": "Définit des tâches marketing récurrentes qu’un agent exécute selon un déclencheur ou calendrier.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /marketing-loops » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/marketing\\-loops(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "5816538a6c8db1d7",
+  "date": "2026-11-21"
+}

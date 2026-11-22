@@ -1,0 +1,12 @@
+{
+  "accroche": "Concevoir des modules profonds et leurs interfaces.",
+  "fait": "Fournit le vocabulaire partagé pour concevoir des modules profonds, leurs interfaces, leurs frontières et leur testabilité.",
+  "pas_pour": "Pas pour examiner l’architecture entière dans un rapport ; (voir trouver-skill)",
+  "quand": "USER dit « /codebase-design » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/codebase\\-design(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "387962444319be9c",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Configurer le dépôt pour les skills d’ingénierie.",
+  "fait": "Configure le suivi des tickets, le vocabulaire de triage et l’organisation des documents de domaine avant le premier usage des autres skills d’ingénierie.",
+  "pas_pour": "Pas pour une configuration répétée après la première mise en place ; (voir trouver-skill)",
+  "quand": "USER dit « /setup-matt-pocock-skills » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/setup\\-matt\\-pocock\\-skills(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "d72a30cc6033abce",
+  "date": "2026-11-21"
+}

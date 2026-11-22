@@ -55,6 +55,10 @@ _etat = {"mod": None, "idx": None, "t_idx": 0.0, "systeme": "", "cache": {}}
 
 def reglages():
     r = dict(DEFAUT)
+    try:  # modele central : ~/.hermes/models-central.json (fond_gratuit)
+        r["modele"] = json.loads((HERMES / "models-central.json").read_text())["fond_gratuit"]["modele"]
+    except (OSError, ValueError, KeyError):
+        pass
     try:
         r.update(json.loads(REGLAGES.read_text()))
     except (OSError, ValueError):
@@ -160,7 +164,7 @@ def router(session_id="", user_message=None, conversation_history=None, platform
         else:
             try:
                 mod.LLM_MODELE = r["modele"]
-                txt, usage, _s = mod.appel_llm(systeme, mod.requete(texte, precedent), max_tokens=200, timeout=r["timeout"])
+                txt, usage, _s = mod.appel_llm(systeme, mod.requete(texte, precedent), max_tokens=500, timeout=r["timeout"])
                 choix = mod.lire_choix(txt, 1, idx.skills)[0]
                 ligne["voie"] = "llm"
                 if len(_etat["cache"]) < r["cache_max"]:

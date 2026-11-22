@@ -1,0 +1,12 @@
+{
+  "accroche": "Implémente : code, teste et commit un ticket.",
+  "fait": "La skill implémente un ticket ou une spec déjà décidée, lance les tests, fait relire le code et commit sur la branche courante. Pour le travail test-first, elle s’appuie sur la skill locale test-driven-development. USER autorise le commit automatique quand il demande explicitement ce workflow.",
+  "pas_pour": "Pas pour produire un plan sans code (voir plan).",
+  "quand": "USER dit « /implement », « utilise le workflow Matt », ou demande d’implémenter un ticket ou une spec déjà validée. Aussi quand USER veut code, tests, revue puis commit automatique.",
+  "motifs": [
+    "(?i)(/implement|workflow\\s+Matt|impl[ée]ment.{0,40}(ticket|spec)|implement.{0,40}(ticket|spec))"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "ba7141f2a76b0264",
+  "date": "2026-11-21"
+}

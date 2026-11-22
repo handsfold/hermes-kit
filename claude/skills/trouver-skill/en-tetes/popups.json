@@ -1,0 +1,12 @@
+{
+  "accroche": "Popups : fenêtres et bandeaux.",
+  "fait": "Crée et améliore fenêtres modales, bandeaux et autres formats de capture ou d’annonce.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /popups » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/popups(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "0092ff6186a94c3f",
+  "date": "2026-11-21"
+}

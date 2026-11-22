@@ -1,0 +1,12 @@
+{
+  "accroche": "Créer un assistant pas à pas pour les actions humaines.",
+  "fait": "Génère un assistant Bash interactif pour guider une personne dans les étapes qu’elle seule peut réaliser.",
+  "pas_pour": "Pas pour des étapes que l’agent peut effectuer lui-même ; (voir trouver-skill)",
+  "quand": "USER dit « /wizard » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/wizard(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "6843214d10205580",
+  "date": "2026-11-21"
+}

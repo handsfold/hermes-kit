@@ -1,0 +1,15 @@
+{
+  "accroche": "Effet animé : trouve le terme précis.",
+  "fait": "La skill associe une description d’animation web au terme précis de son glossaire.",
+  "pas_pour": "Pas pour concevoir ni coder une animation (voir construire).",
+  "quand": "USER dit « comment ça s’appelle quand… », « quel est le nom de cet effet ? ». Aussi quand USER décrit un mouvement d’interface sans connaître le terme.",
+  "motifs": [
+    "(?i)\\bterme d[’']animation\\b",
+    "(?i)\\beffet animé\\b",
+    "(?i)comment ça s[’']appelle",
+    "(?i)(?:comment.{0,20}(?:s[’']appelle|nom|terme)|quel.{0,20}(?:nom|terme)).{0,30}(?:effet|animation|mouvement)"
+  ],
+  "categorie": "creative",
+  "origine_sha": "ee6657e3b06a9c23",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Structurer la matière brute en article.",
+  "fait": "Structure la matière brute en article, paragraphe par paragraphe.",
+  "pas_pour": "Pas pour élargir l’exploration sans décider d’une structure ; (voir trouver-skill)",
+  "quand": "USER dit « /writing-shape » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/writing\\-shape(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "52fa4e4f9bae5b2c",
+  "date": "2026-11-21"
+}

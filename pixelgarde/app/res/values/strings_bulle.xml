@@ -30,4 +30,5 @@
     <string name="bulle_choix_oui">Yes</string>
     <string name="bulle_choix_non">No</string>
     <string name="bulle_onglet_apps">Apps</string>
+    <string name="bulle_etat_dort">Asleep: say \"Creeper\"</string>
 </resources>

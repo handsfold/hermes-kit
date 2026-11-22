@@ -1,0 +1,13 @@
+{
+  "accroche": "Audit de sécurité : chasse aux failles.",
+  "fait": "Analyse le code, les dépendances et les frontières de confiance, puis valide les constats avec des preuves.",
+  "pas_pour": "Pas pour tester un système sans autorisation (voir reconnaissance-reseau).",
+  "quand": "USER dit « lance un audit de sécurité », « cherche les vulnérabilités ». Aussi quand il demande une revue de sécurité d’un projet.",
+  "motifs": [
+    "audit de sécurité|security audit|revue de sécurité du code",
+    "cherche.{0,30}(faille|vulnérabilit)|vulnérabilités? du (code|projet)"
+  ],
+  "categorie": "security",
+  "origine_sha": "2dadf7bd85bc1e9a",
+  "date": "2026-11-22"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Co-marketing : campagnes conjointes.",
+  "fait": "Sélectionne des partenaires et organise des campagnes marketing conjointes.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /co-marketing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/co\\-marketing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "2c1c52676394f2b6",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Rend une app web plus native sur téléphone.",
+  "fait": "Couvre les ajustements web mobiles et leur vérification sur appareil réel.",
+  "pas_pour": "Pas pour animer une app React Native (voir trouver-skill).",
+  "quand": "USER dit « /mobile-native » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/mobile\\-native(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "8059a751ef01d938",
+  "date": "2026-11-21"
+}

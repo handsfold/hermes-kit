@@ -1,0 +1,12 @@
+{
+  "accroche": "Inscription : optimiser les parcours.",
+  "fait": "Optimise les parcours d’inscription, d’enregistrement et de démarrage d’essai.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /signup » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/signup(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "1fb0b60e9813feb7",
+  "date": "2026-11-21"
+}

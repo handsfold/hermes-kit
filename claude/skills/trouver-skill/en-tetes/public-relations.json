@@ -1,0 +1,12 @@
+{
+  "accroche": "Presse : relations et communication.",
+  "fait": "Prépare les relations presse, prises de parole médias, communiqués et gestion de crise.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /public-relations » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/public\\-relations(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "02f46a90f4f4ff24",
+  "date": "2026-11-21"
+}

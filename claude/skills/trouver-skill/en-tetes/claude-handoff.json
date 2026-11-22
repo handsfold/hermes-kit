@@ -1,0 +1,12 @@
+{
+  "accroche": "Transmettre la conversation à un agent d’arrière-plan.",
+  "fait": "Transmet la conversation à un nouvel agent d’arrière-plan qui reprend immédiatement le travail.",
+  "pas_pour": "Pas pour produire uniquement un document de relais ; (voir trouver-skill)",
+  "quand": "USER dit « /claude-handoff » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/claude\\-handoff(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "a6f7fa14cd2f72ff",
+  "date": "2026-11-21"
+}

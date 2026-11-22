@@ -1,0 +1,12 @@
+{
+  "accroche": "Éprouver un plan tout en créant glossaire et ADR.",
+  "fait": "Mène un entretien exigeant sur un plan ou un design et crée des ADR et un glossaire en parallèle.",
+  "pas_pour": "Pas pour un entretien sans création de documentation de domaine ; (voir trouver-skill)",
+  "quand": "USER dit « /grill-with-docs » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/grill\\-with\\-docs(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "37f0a65492b84b12",
+  "date": "2026-11-21"
+}

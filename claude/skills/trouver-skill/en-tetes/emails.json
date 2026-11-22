@@ -1,0 +1,12 @@
+{
+  "accroche": "Emails : séquences automatisées.",
+  "fait": "Crée ou améliore les séquences automatisées de courriels, de bienvenue, suivi et réactivation.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /emails » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/emails(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "0ea76cdcaaf71664",
+  "date": "2026-11-21"
+}

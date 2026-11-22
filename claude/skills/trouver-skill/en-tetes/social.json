@@ -1,0 +1,12 @@
+{
+  "accroche": "Social : contenu organique.",
+  "fait": "Prépare le contenu social organique, formats, publications, scripts vidéo et calendriers.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /social » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/social(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "23bd484ec2517312",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Applique les principes d’interface d’Apple au web.",
+  "fait": "Guide le design d’interactions, de mouvement et de fondations visuelles à la manière d’Apple.",
+  "pas_pour": "Pas pour du design d’interface sans lien avec ces principes (voir trouver-skill).",
+  "quand": "USER dit « /apple-design » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/apple\\-design(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "b086418d83e0526a",
+  "date": "2026-11-21"
+}

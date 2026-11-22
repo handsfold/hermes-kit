@@ -1,0 +1,12 @@
+{
+  "accroche": "Clients : recherche et retours.",
+  "fait": "Mène ou synthétise la recherche client, entretiens, enquêtes, retours et verbatims.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /customer-research » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/customer\\-research(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "ca47f136bd015238",
+  "date": "2026-11-21"
+}

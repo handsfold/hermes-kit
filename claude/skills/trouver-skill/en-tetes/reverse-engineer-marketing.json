@@ -1,0 +1,12 @@
+{
+  "accroche": "Croissance concurrente : retracer les initiatives.",
+  "fait": "Retrace la croissance et les initiatives d’une entreprise concurrente à partir de données publiques.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /reverse-engineer-marketing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/reverse\\-engineer\\-marketing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "1f4fed18feec19c9",
+  "date": "2026-11-21"
+}

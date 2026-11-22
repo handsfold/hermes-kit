@@ -1439,7 +1439,7 @@ def lancer(addr, ident, env_sup=None):
 # tour du standard. Un telephone d'avant la 2.21 les envoie sans id.
 # ecrire:<texte hex>[:<mode>:<conversation>][:qg]. Le texte peut etre vide
 # (mode « repondre » d'un toucher). Les 2.45 a 2.47 envoient la forme courte.
-ECRIRE = re.compile(r"ecrire:([0-9a-f]{0,4000})(?::(question|repondre|resumer|traduire):([0-9a-f]{6}))?(:qg)?")
+ECRIRE = re.compile(r"ecrire:([0-9a-f]{0,4000})(?::(question|repondre|resumer|traduire|seduire):([0-9a-f]{6}))?(:qg)?")
 BOUTON_VOIX = re.compile(r"voix(oui|non|detail|b[1-3])(?::([a-z0-9]{1,12}))?")
 _APPUIS_VOIX = {}
 
@@ -2285,6 +2285,35 @@ def oreille_tactile(addr, stop_evt):
                 pass
 
 
+def invite_chrome(xml):
+    """Etat prouve de la demande Chrome ; None si l'arbre n'est pas exploitable."""
+    import xml.etree.ElementTree as ET
+    try:
+        debut = xml.index("<hierarchy")
+        fin = xml.index("</hierarchy>", debut) + len("</hierarchy>")
+        racine = ET.fromstring(xml[debut:fin])
+    except (ValueError, ET.ParseError):
+        return None
+    paquets = tuple(n.rstrip("/") for n in NAVIGATEURS_INVITE)
+    alertes = (
+        "ce site ne peut pas demander votre autorisation",
+        "fermez toutes les info-bulles et superpositions",
+        "close any bubbles or overlays",
+        "this site can't ask for your permission",
+        "this site cannot ask for your permission",
+    )
+    for node in racine.iter("node"):
+        if node.get("package") not in paquets:
+            continue
+        identifiant = node.get("resource-id", "")
+        if identifiant.endswith(":id/tab_modal_dialog_container"):
+            return True
+        texte = node.get("text", "").casefold()
+        if node.get("class") == "android.widget.TextView" and any(a in texte for a in alertes):
+            return True
+    return False
+
+
 def oreille_invite(addr, stop_evt):
     """Dit au Creeper quand Chrome affiche une demande d'autorisation.
 
@@ -2303,19 +2332,25 @@ def oreille_invite(addr, stop_evt):
     while not stop_evt.is_set():
         devant = False
         try:
-            r = sh(addr, "umask 000; touch {v}; dumpsys activity activities | grep -m1 topResumedActivity"
-                   .format(v=VIVANT_TEL), timeout=8)
+            r = sh(addr, "dumpsys activity activities | grep -m1 topResumedActivity", timeout=8)
             devant = any(n in r.stdout for n in NAVIGATEURS_INVITE)
             nouveau = False if not devant else None
             if devant:
                 d = sh(addr, "rm -f /data/local/tmp/inv.xml; uiautomator dump /data/local/tmp/inv.xml "
                        ">/dev/null 2>&1; cat /data/local/tmp/inv.xml 2>/dev/null", timeout=12)
-                if "<hierarchy" in d.stdout:
-                    nouveau = ":id/tab_modal_dialog_container" in d.stdout
-            if nouveau is not None and (nouveau != etat or time.time() - ecrit > 30):
-                sh(addr, "umask 000; echo {} > {}; chmod 666 {}".format(
-                    1 if nouveau else 0, INVITE_TEL, INVITE_TEL), timeout=8)
-                etat, ecrit = nouveau, time.time()
+                nouveau = invite_chrome(d.stdout) if d.returncode == 0 else None
+            if r.returncode != 0:
+                nouveau = None
+            if nouveau is not None:
+                if nouveau != etat or time.time() - ecrit > 30:
+                    ecriture = sh(addr, "umask 000; echo {} > {}; chmod 666 {}".format(
+                        1 if nouveau else 0, INVITE_TEL, INVITE_TEL), timeout=8)
+                    if ecriture.returncode != 0:
+                        stop_evt.wait(2.0)
+                        continue
+                    etat, ecrit = nouveau, time.time()
+                # Ne certifier que l'etat observe : un dump rate laisse expirer le repli de Discret.
+                sh(addr, "umask 000; touch {}".format(VIVANT_TEL), timeout=8)
         except (subprocess.TimeoutExpired, OSError):
             pass
         # Plus vite quand une demande est ouverte : on veut la voir se fermer.

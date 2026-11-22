@@ -1,9 +1,10 @@
 ---
 name: forget
-description: "Oublie X, efface de ta mémoire : oubli durable. Efface durablement de la mémoire de Claude ce que l'utilisateur demande d'oublier : mémoire fichier (MEMORY.md + fichiers) et observations/summaries claude-mem."
+description: "Oublie X, efface de ta mémoire : oubli durable. Efface durablement de la mémoire de Claude ce que l'utilisateur demande d'oublier : mémoire fichier"
 when_to_use: "L'utilisateur dit « oublie X », « supprime X de ta mémoire », « ne te rappelle plus de X », « efface ce qu'on a fait sur X »."
 argument-hint: [sujet ou mot-clé à oublier]
 allowed-tools: Bash(~/.claude/skills/forget/forget-mem.sh:*), Read, Edit, Grep, Glob
+disable-model-invocation: true
 ---
 
 # /forget : Oublier durablement un sujet

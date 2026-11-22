@@ -1,0 +1,12 @@
+{
+  "accroche": "Configurer les modules profonds TypeScript.",
+  "fait": "Configure dependency-cruiser dans un dépôt TypeScript pour imposer des modules profonds accessibles seulement via leurs fichiers d’entrée.",
+  "pas_pour": "Pas pour un dépôt qui n’utilise pas TypeScript ; (voir trouver-skill)",
+  "quand": "USER dit « /setup-ts-deep-modules » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/setup\\-ts\\-deep\\-modules(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "967239250e889e1f",
+  "date": "2026-11-21"
+}

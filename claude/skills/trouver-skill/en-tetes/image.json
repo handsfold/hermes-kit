@@ -1,0 +1,12 @@
+{
+  "accroche": "Image : visuels marketing.",
+  "fait": "Aide à créer, générer, retoucher ou optimiser des visuels marketing.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /image » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/image(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "d57c946af92fd92f",
+  "date": "2026-11-21"
+}

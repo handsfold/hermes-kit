@@ -1,0 +1,12 @@
+{
+  "accroche": "Textes : révision et correction.",
+  "fait": "Relit et améliore un texte existant sans le réécrire entièrement.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /copy-editing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/copy\\-editing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "049f3f8574485a8b",
+  "date": "2026-11-21"
+}

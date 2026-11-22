@@ -1,0 +1,12 @@
+{
+  "accroche": "Décision incertaine → questionnaire à faire remplir.",
+  "fait": "Transforme une décision difficile à trancher seul en questionnaire à faire remplir par quelqu’un.",
+  "pas_pour": "Pas pour structurer un plan ou une conception ; (voir trouver-skill)",
+  "quand": "USER dit « /to-questionnaire » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/to\\-questionnaire(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "0460d012982d0d5c",
+  "date": "2026-11-21"
+}

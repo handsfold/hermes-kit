@@ -1,0 +1,12 @@
+{
+  "accroche": "Offre : valeur et modalités.",
+  "fait": "Conçoit et améliore une offre, sa valeur, ses garanties, bonus, modalités et urgence.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /offers » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/offers(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "107ca042c460690a",
+  "date": "2026-11-21"
+}

@@ -10,7 +10,7 @@
 set -uo pipefail
 TEXTE="${1:?texte manquant}"
 SORTIE="${2:?fichier de sortie manquant}"
-VOIX="${3:-fr-FR-RemyMultilingualNeural}"
+VOIX="${3:-fr-FR-HenriNeural}"
 DEBIT="${4:-+8%}"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
