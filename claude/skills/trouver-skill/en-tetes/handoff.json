@@ -1,0 +1,12 @@
+{
+  "accroche": "Conversation actuelle → document de relais concis.",
+  "fait": "Condense la conversation en cours dans un document de relais pour un autre agent.",
+  "pas_pour": "Pas pour transmettre immédiatement le travail à un agent en arrière-plan ; (voir trouver-skill)",
+  "quand": "USER dit « /handoff » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/handoff(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "82352269add0741d",
+  "date": "2026-11-21"
+}

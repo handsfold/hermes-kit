@@ -1,0 +1,12 @@
+{
+  "accroche": "Rédiger des documents destinés aux agents.",
+  "fait": "Guide la rédaction de documents consommés par des agents, notamment les skills et AGENTS.md ou CLAUDE.md.",
+  "pas_pour": "Pas pour rédiger un document destiné uniquement à des lecteurs humains ; (voir trouver-skill)",
+  "quand": "USER dit « /writing-for-agents » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/writing\\-for\\-agents(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "8d832dd9ef1aecb0",
+  "date": "2026-11-21"
+}

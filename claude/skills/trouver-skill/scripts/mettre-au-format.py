@@ -43,7 +43,7 @@ LOCK = HOME / ".agents/.skill-lock.json"
 CLAUDE = HOME / ".claude/skills"
 HERMES = HOME / ".hermes/skills"
 DECLENCHEURS = HOME / ".claude/outils/declencheurs.json"
-VERIFIER = CLAUDE / "fabrique-skill/scripts/verifier-skill.py"
+VERIFIER = AGENTS / "atelier/fabrique-skill/scripts/verifier-skill.py"
 EN_TETES = Path(__file__).resolve().parent.parent / "en-tetes"
 
 EXCLUES = {"find-skills"}          # tierce, « NE PAS la modifier » (decision de USER, 2026-10-25)
@@ -280,6 +280,9 @@ def controler(reel):
                        capture_output=True, text=True, timeout=120)
     E = [l[4:] for l in r.stdout.splitlines() if l.startswith("  E ")]
     A = [l[4:] for l in r.stdout.splitlines() if l.startswith("  A ")]
+    if r.returncode not in (0, 1) or (r.returncode == 1 and not E):
+        detail = r.stderr.strip() or "aucune erreur detaillee"
+        E.append(f"execution de verifier-skill.py impossible (code {r.returncode}) : {detail}")
     return E, A
 
 

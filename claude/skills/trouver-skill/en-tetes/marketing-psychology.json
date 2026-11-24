@@ -1,0 +1,12 @@
+{
+  "accroche": "Psychologie : principes appliqués au marketing.",
+  "fait": "Applique les principes psychologiques au marketing et évalue l’honnêteté des tactiques de persuasion.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /marketing-psychology » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/marketing\\-psychology(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "0496f976f22ed5da",
+  "date": "2026-11-21"
+}

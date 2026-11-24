@@ -1,0 +1,12 @@
+{
+  "accroche": "RevOps : organiser les opérations de revenus.",
+  "fait": "Structure les opérations de revenus, étapes de cycle de vie, qualification, routage et CRM.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /revops » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/revops(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "ebf0559aae0b0534",
+  "date": "2026-11-21"
+}

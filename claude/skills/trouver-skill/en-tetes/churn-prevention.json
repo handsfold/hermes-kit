@@ -1,0 +1,12 @@
+{
+  "accroche": "Rétention : prévenir les résiliations.",
+  "fait": "Réduit les résiliations avec parcours d’annulation, enquêtes, offres de rétention et récupération de paiement.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /churn-prevention » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/churn\\-prevention(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "c9f720fc8ab0bbae",
+  "date": "2026-11-21"
+}

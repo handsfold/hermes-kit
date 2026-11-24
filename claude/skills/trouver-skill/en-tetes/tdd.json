@@ -1,0 +1,12 @@
+{
+  "accroche": "Développement piloté par les tests.",
+  "fait": "Applique le cycle test-first de développement piloté par les tests, notamment pour les fonctionnalités, corrections et tests d’intégration.",
+  "pas_pour": "Pas pour un changement sans besoin de tests préalables ; (voir trouver-skill)",
+  "quand": "USER dit « /tdd » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/tdd(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "5e3350b3874aec8f",
+  "date": "2026-11-21"
+}

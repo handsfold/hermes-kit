@@ -1,0 +1,12 @@
+{
+  "accroche": "Supprime les animations superflues.",
+  "fait": "Repère et retire les animations inutiles sans en ajouter ni les retoucher.",
+  "pas_pour": "Pas pour ajouter ou améliorer des animations (voir trouver-skill).",
+  "quand": "USER dit « /remove-animations » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/remove\\-animations(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "9ff6c87d8585c63a",
+  "date": "2026-11-21"
+}

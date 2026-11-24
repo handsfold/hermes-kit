@@ -1,0 +1,12 @@
+{
+  "accroche": "Vocabulaire partagé pour concevoir une usine logicielle.",
+  "fait": "Établit le langage partagé pour concevoir une usine logicielle, ses tâches et les services auxquels elle se connecte.",
+  "pas_pour": "Pas pour concevoir une application sans flux de tâches automatisées ; (voir trouver-skill)",
+  "quand": "USER dit « /software-factory » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/software\\-factory(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "4ffb6e5127ac8aa4",
+  "date": "2026-11-21"
+}

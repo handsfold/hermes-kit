@@ -1,0 +1,12 @@
+{
+  "accroche": "Coordonne les mouvements de plusieurs éléments.",
+  "fait": "Détermine quels éléments bougent, dans quel ordre et avec quel chevauchement.",
+  "pas_pour": "Pas pour une animation isolée sans coordination (voir trouver-skill).",
+  "quand": "USER dit « /choreograph » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/choreograph(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "f27c03d732fa1805",
+  "date": "2026-11-21"
+}

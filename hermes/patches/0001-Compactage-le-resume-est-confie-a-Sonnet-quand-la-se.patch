@@ -16,7 +16,7 @@ Retouche: R01
  1 file changed, 28 insertions(+), 1 deletion(-)
 
 diff --git a/agent/context_compressor.py b/agent/context_compressor.py
-index 41d92dee2b..1faf9cbbb5 100644
+index 41d92dee2b9..1faf9cbbb57 100644
 --- a/agent/context_compressor.py
 +++ b/agent/context_compressor.py
 @@ -7,6 +7,7 @@ import copy

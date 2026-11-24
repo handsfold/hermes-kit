@@ -1,0 +1,12 @@
+{
+  "accroche": "Produit : contexte et positionnement.",
+  "fait": "Crée ou met à jour le document de contexte produit, cible, positionnement et voix client.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /product-marketing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/product\\-marketing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "54c20546db3b839f",
+  "date": "2026-11-21"
+}

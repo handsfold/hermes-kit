@@ -1,0 +1,12 @@
+{
+  "accroche": "Choisir la skill ou le flux adapté à la situation.",
+  "fait": "Oriente vers la skill ou le flux de travail adapté parmi ceux du dépôt.",
+  "pas_pour": "Pas pour une question sans rapport avec les skills du dépôt ; (voir trouver-skill)",
+  "quand": "USER dit « /ask-matt » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/ask\\-matt(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "b043bdcdd27cb361",
+  "date": "2026-11-21"
+}

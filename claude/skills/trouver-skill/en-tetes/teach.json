@@ -1,0 +1,12 @@
+{
+  "accroche": "Enseigner une compétence ou un concept dans l’espace.",
+  "fait": "Enseigne à l’utilisateur une compétence ou un concept dans l’espace de travail.",
+  "pas_pour": "Pas pour exécuter une tâche à la place d’un apprentissage ; (voir trouver-skill)",
+  "quand": "USER dit « /teach » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/teach(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "490e63f8d36f267d",
+  "date": "2026-11-21"
+}

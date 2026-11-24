@@ -1,0 +1,12 @@
+{
+  "accroche": "Vidéo : création marketing.",
+  "fait": "Aide à produire des vidéos par enregistrement, génération IA ou création programmatique.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /video » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/video(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "78b31d7c249f8d55",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,15 @@
+{
+  "accroche": "Animation web : code un mouvement d’interface qui sert.",
+  "fait": "La skill décide si le mouvement sert l’interface, choisit l’outil et les propriétés, puis écrit une animation web accessible.",
+  "pas_pour": "Pas pour trouver le terme d’un effet (voir animation-vocabulary), ni choisir une bibliothèque (voir pick-ui-library).",
+  "quand": "USER dit « ajoute une animation », « anime ce menu », « fais une transition », « ce bouton manque de vie ». Aussi quand il demande de coder le mouvement d’une interface web.",
+  "motifs": [
+    "(?i)(ajoute|code|construis|crée|fais|anime|animer).{0,40}(animation|transition|mouvement|effet animé|effet de mouvement)",
+    "(?i)(anime|animer|animé|animée).{0,30}(menu|bouton|composant|interface|page)|(?:menu|bouton|composant|interface|page).{0,30}(animé|animée|animation|transition|mouvement)",
+    "(?i)(bouton|menu|composant|interface).{0,30}(manque de vie|plus vivant|mouvement)|(?:manque de vie|plus vivant).{0,30}(bouton|menu|composant|interface)",
+    "(?i)(web|css|motion).{0,20}(animation|transition)|(?:animation|transition).{0,20}(web|css|motion)"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "c5b5a8118af3e0b4",
+  "date": "2026-11-21"
+}

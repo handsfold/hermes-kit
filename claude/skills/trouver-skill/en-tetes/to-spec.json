@@ -1,0 +1,12 @@
+{
+  "accroche": "Conversation actuelle → spécification publiée.",
+  "fait": "Synthétise le contexte discuté en spécification et la publie dans le suivi de projet, sans entretien.",
+  "pas_pour": "Pas pour créer des tickets d’implémentation ; (voir trouver-skill)",
+  "quand": "USER dit « /to-spec » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/to\\-spec(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "170351531e7ff25f",
+  "date": "2026-11-21"
+}

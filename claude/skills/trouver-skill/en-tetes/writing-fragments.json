@@ -1,0 +1,12 @@
+{
+  "accroche": "Explorer la matière brute sans encore la structurer.",
+  "fait": "Explore et extrait des fragments à partir de matière brute sans s’engager dans une structure.",
+  "pas_pour": "Pas pour transformer les fragments en article structuré ; (voir trouver-skill)",
+  "quand": "USER dit « /writing-fragments » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/writing\\-fragments(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "8a3c9073c4244a7e",
+  "date": "2026-11-21"
+}

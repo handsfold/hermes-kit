@@ -1,0 +1,12 @@
+{
+  "accroche": "Trier les tickets et PR externes et rédiger des briefs.",
+  "fait": "Fait avancer tickets et pull requests externes dans un processus de triage, vérifie, catégorise et rédige des briefs pour agents.",
+  "pas_pour": "Pas pour implémenter directement une demande ; (voir trouver-skill)",
+  "quand": "USER dit « /triage » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/triage(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "4e7bc025f13ba1c4",
+  "date": "2026-11-21"
+}

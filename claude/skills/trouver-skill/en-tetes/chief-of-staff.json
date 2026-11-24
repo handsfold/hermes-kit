@@ -1,0 +1,12 @@
+{
+  "accroche": "Coordonner des sous-agents sur un objectif durable.",
+  "fait": "Poursuit un objectif de longue durée au cours d’une session en coordonnant des sous-agents.",
+  "pas_pour": "Pas pour une tâche courte et autonome ; (voir trouver-skill)",
+  "quand": "USER dit « /chief-of-staff » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/chief\\-of\\-staff(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "6c3c3d6979393f55",
+  "date": "2026-11-21"
+}

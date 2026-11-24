@@ -1,0 +1,12 @@
+{
+  "accroche": "Concurrents : profils et observations.",
+  "fait": "Établit des profils datés de concurrents en séparant faits observés et déductions.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /competitor-profiling » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/competitor\\-profiling(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "9d08215353617b08",
+  "date": "2026-11-21"
+}

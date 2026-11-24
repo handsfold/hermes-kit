@@ -1,0 +1,12 @@
+{
+  "accroche": "Rédiger le corps d’une pull request.",
+  "fait": "Fournit un modèle pour rédiger le corps d’une pull request.",
+  "pas_pour": "Pas pour implémenter le changement ou examiner le code ; (voir trouver-skill)",
+  "quand": "USER dit « /pr » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/pr(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "23b909927ce6a972",
+  "date": "2026-11-21"
+}

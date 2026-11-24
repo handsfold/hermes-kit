@@ -1,0 +1,12 @@
+{
+  "accroche": "Créateurs : partenariats et ambassadeurs.",
+  "fait": "Évalue et structure les partenariats avec créateurs, influenceurs et ambassadeurs, des contrats aux droits.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /influencer-marketing » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/influencer\\-marketing(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "d5d2d8fee67fa485",
+  "date": "2026-11-21"
+}

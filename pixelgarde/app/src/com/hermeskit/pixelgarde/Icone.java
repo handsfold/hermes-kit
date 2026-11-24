@@ -126,7 +126,7 @@ class Icone extends View {
             r.set(8.4f * u, 8.4f * u, 15.6f * u, 15.6f * u);
             c.drawRoundRect(r, u * 1.4f, u * 1.4f, plein);
 
-        } else if ("voix".equals(id)) {                // micro : mains libres
+        } else if ("voix".equals(id) || "direct".equals(id)) { // micro : mains libres, ou conversation directe
             r.set(8.9f * u, 2.9f * u, 15.1f * u, 14.3f * u);
             c.drawRoundRect(r, u * 3.1f, u * 3.1f, trait);
             r.set(5.4f * u, 6.6f * u, 18.6f * u, 18.4f * u);

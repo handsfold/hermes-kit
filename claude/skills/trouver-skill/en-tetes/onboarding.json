@@ -1,0 +1,12 @@
+{
+  "accroche": "Onboarding : accueil et activation.",
+  "fait": "Améliore l’accueil et l’activation des nouveaux utilisateurs et leur accès à la valeur.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /onboarding » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/onboarding(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "06b82751a789511c",
+  "date": "2026-11-21"
+}

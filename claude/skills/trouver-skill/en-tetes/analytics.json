@@ -1,0 +1,12 @@
+{
+  "accroche": "Analytique : mesurer et auditer.",
+  "fait": "Configure et audite l’analytique, les plans de mesure, événements et métriques.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /analytics » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/analytics(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "969fde23a91f54f1",
+  "date": "2026-11-21"
+}

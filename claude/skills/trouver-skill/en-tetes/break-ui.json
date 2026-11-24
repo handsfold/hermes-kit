@@ -1,0 +1,12 @@
+{
+  "accroche": "Soumet une interface aux cas extrêmes.",
+  "fait": "Teste une interface avec des données difficiles et rapporte les problèmes.",
+  "pas_pour": "Pas pour une critique visuelle ou une revue de mouvement (voir trouver-skill).",
+  "quand": "USER dit « /break-ui » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/break\\-ui(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "5b70fd80491b1519",
+  "date": "2026-11-21"
+}

@@ -70,6 +70,23 @@ def marquer_debut(brut):
         pass
 
 
+def lire_continuite(brut):
+    """Module séparé, interpréteur existant, contrat natif /goal sans redémarrage."""
+    import subprocess
+    from pathlib import Path
+    home = Path.home() / '.hermes'
+    try:
+        r = subprocess.run([str(home / 'hermes-agent/venv/bin/python'),
+                            str(home / 'agent-hooks/continuite.py')],
+                           input=brut, text=True, capture_output=True, timeout=2)
+        if r.returncode:
+            raise RuntimeError('module indisponible')
+        return json.loads(r.stdout or '{}').get('context', '')
+    except Exception:
+        return ('Protection de continuité indisponible : garder ce travail dans le tour actif ; '
+                'vérifier agent-hooks/continuite.py avant de promettre une reprise automatique.')
+
+
 def main():
     brut = ""
     try:
@@ -77,15 +94,16 @@ def main():
     except Exception:
         pass
     marquer_debut(brut)
+    continuite = lire_continuite(brut)
     try:
-        if not os.path.exists(REGLES):
-            return 0
-        etat = json.load(open(REGLES))
+        etat = json.load(open(REGLES)) if os.path.exists(REGLES) else {}
     except Exception:
-        return 0
+        etat = {}
 
     actives = [r for r in etat.get("regles", []) if r.get("statut") == "active"]
     if not actives:
+        if continuite:
+            print(json.dumps({'context': continuite}, ensure_ascii=False))
         return 0
     actives.sort(key=lambda r: (-r.get("confirmations", 0), r.get("id", "")))
 
@@ -115,7 +133,7 @@ def main():
         f"{retirees}"
         "</regles-apprises>"
     )
-    print(json.dumps({"context": bloc}, ensure_ascii=False))
+    print(json.dumps({"context": bloc + ('\n\n' + continuite if continuite else '')}, ensure_ascii=False))
     return 0
 
 

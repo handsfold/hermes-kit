@@ -1,0 +1,12 @@
+{
+  "accroche": "Diagnostiquer bugs difficiles et régressions.",
+  "fait": "Suit une boucle de diagnostic pour les bugs difficiles et les régressions de performance.",
+  "pas_pour": "Pas pour une demande de fonctionnalité sans anomalie à diagnostiquer ; (voir trouver-skill)",
+  "quand": "USER dit « /diagnosing-bugs » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/diagnosing\\-bugs(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "9965245c4b333add",
+  "date": "2026-11-21"
+}

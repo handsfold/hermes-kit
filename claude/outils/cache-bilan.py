@@ -30,9 +30,19 @@ def famille_modele(nom):
             return k
     return "opus"
 
+# Anatomie (2026-11-13) : poids de chaque poste, allers-retours par demande, prefixes reecrits.
+poids = defaultdict(float)      # $ par poste : lecture, ecriture, sortie, entree
+demandes = 0                    # messages tapes par USER (hors resultats d'outils, hors sous-agents)
+ecrits = []                     # cache ecrit par appel
+reecrits = []                   # (cw, projet, session) : gros prefixe reecrit sans pause
+debuts = []                     # cache ecrit au premier appel de chaque session (hors sous-agents)
+gros = defaultdict(lambda: [0, 0])  # cause -> [appels, tokens] pour les appels >= 30k ecrits
+outils_par_msg = defaultdict(int)
 froids = []   # reprises a cache froid : (ecart s, cw, projet, session, $ en trop)
 deja_vus = set()
 SEUIL_CW = 100_000   # ecriture de cache assez grosse pour compter comme reprise lourde
+# Compactages (2026-11-14) : [ts, preTokens, contexte au 1er appel suivant, cw de cet appel, appels depuis le precedent, projet, session]
+compacts = []
 def ts_epoch(s):
     from datetime import datetime
     try:
@@ -60,7 +70,26 @@ for f in glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursiv
             p = re.sub(r"^(agent|amazon|archives|contenu|entreprise-a|musique|outils|perso|sites)-", "",
                        parts[0].split("-Projets-")[-1]) + " [prime]"
         vus = set()
+        ctx_prec = 0
+        attend = None       # compactage dont on attend le premier appel
+        depuis = 0          # appels au modele depuis le dernier compactage
         for ligne in texte.splitlines():
+            if '"compactMetadata"' in ligne and '"type":"system"' in ligne:
+                try:
+                    o = json.loads(ligne)
+                    cm = o.get("compactMetadata")
+                    if o.get("type") == "system" and isinstance(cm, dict) and cm.get("preTokens"):
+                        attend = [ts_epoch(o.get("timestamp", "")), cm["preTokens"], None, 0, depuis, p, sid]
+                        compacts.append(attend)
+                        depuis = 0
+                        continue
+                except Exception:
+                    pass
+            if ('"type":"user"' in ligne and '"tool_result"' not in ligne and "subagents" not in parts
+                    and '"isMeta":true' not in ligne and '"isCompactSummary":true' not in ligne
+                    and '"isSidechain":true' not in ligne):
+                demandes += 1
+                continue
             if '"usage"' not in ligne and '"tool_use"' not in ligne:
                 continue
             try:
@@ -73,6 +102,7 @@ for f in glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursiv
                 for b in c:
                     if isinstance(b, dict) and b.get("type") == "tool_use":
                         outils[b.get("name", "?")] += 1
+                        outils_par_msg[m.get("id") or id(o)] += 1
             u = m.get("usage") or {}
             if not u:
                 continue
@@ -83,9 +113,40 @@ for f in glob.glob(os.path.expanduser("~/.claude/projects/**/*.jsonl"), recursiv
                 vus.add(m["id"])
             cr = u.get("cache_read_input_tokens", 0)
             cw = u.get("cache_creation_input_tokens", 0)
+            depuis += 1
+            if attend is not None:
+                attend[2] = cr + cw + u.get("input_tokens", 0)
+                attend[3] = cw
+                attend = None
             g = GRILLES.get(famille_modele(m.get("model", "")), GRILLES["opus-5"])
             usd = (u.get("input_tokens", 0) * g[0] + u.get("output_tokens", 0) * g[1] + cw * g[2] + cr * g[3]) / 1e6
+            poids["lecture"] += cr * g[3] / 1e6
+            poids["ecriture"] += cw * g[2] / 1e6
+            poids["sortie"] += u.get("output_tokens", 0) * g[1] / 1e6
+            poids["entree"] += u.get("input_tokens", 0) * g[0] / 1e6
+            ecrits.append(cw)
             t_ = ts_epoch(o.get("timestamp", ""))
+            # Prefixe reecrit a chaud : le contexte existait, il est repaye en ecriture sans pause.
+            if (ctx_prec > 30_000 and cw > 20_000 and cr < ctx_prec / 2
+                    and t_ is not None and dernier_ts is not None and t_ - dernier_ts <= 300):
+                reecrits.append((cw, p, sid))
+            if dernier_ts is None and "subagents" not in parts:
+                debuts.append(cw + cr)
+            if cw >= 30_000:
+                sous = "subagents" in parts
+                if dernier_ts is None:
+                    cause = "debut de sous-agent" if sous else "debut de session"
+                elif t_ is not None and t_ - dernier_ts > 3600:
+                    cause = "reprise apres pause > 1 h"
+                elif t_ is not None and t_ - dernier_ts > 300:
+                    cause = "reprise apres pause 5 min - 1 h"
+                elif cr < ctx_prec / 2:
+                    cause = "prefixe reecrit a chaud"
+                else:
+                    cause = "gros ajout (sortie d'outil, fichier lu)"
+                gros[cause][0] += 1
+                gros[cause][1] += cw
+            ctx_prec = cr + cw + u.get("input_tokens", 0)
             if t_ is not None:
                 if dernier_ts is not None and cw >= SEUIL_CW and t_ - dernier_ts > 300:
                     froids.append((t_ - dernier_ts, cw, p, sid, cw * (g[2] - g[3]) / 1e6))
@@ -144,6 +205,65 @@ for nom, mini in (("pause > 5 min", 300), ("pause > 1 h", 3600), ("pause > 6 h",
           f"  {sum(x[4] for x in sel):6.0f} $ en trop vs cache chaud ({100*sum(x[4] for x in sel)/tot_usd_pre:.1f}% du total)")
 for e, w, p_, s_, usd_ in sorted(froids, key=lambda x: -x[4])[:5]:
     print(f"    {p_[-30:]:30s} {s_}  pause {e/3600:5.1f} h  ecrit {w/1000:4.0f}k  {usd_:5.2f} $")
+
+print("\n=== Anatomie : ce qui pese vraiment ===")
+tp = sum(poids.values()) or 1
+print("  poids par poste : " + "   ".join(f"{k} {100*v/tp:.0f}%" for k, v in sorted(poids.items(), key=lambda x: -x[1])))
+n_app = len(ecrits) or 1
+print(f"  {demandes} demandes de USER, {n_app} appels au modele : {n_app/max(demandes,1):.0f} allers-retours par demande")
+if ecrits:
+    e = sorted(ecrits)
+    te = sum(e) or 1
+    print(f"  cache ecrit par appel : mediane {e[len(e)//2]/1000:.1f}k   p90 {e[int(len(e)*.9)]/1000:.1f}k   moyenne {te/len(e)/1000:.1f}k")
+    for bas, haut in ((0, 2), (2, 10), (10, 30), (30, 10**6)):
+        sel = [x for x in e if bas*1000 <= x < haut*1000]
+        print(f"    {bas:>3d}-{haut if haut < 10**6 else 'max':>3}k : {100*len(sel)/len(e):5.1f}% des appels = {100*sum(sel)/te:5.1f}% de l'ecriture")
+print("  appels >= 30k ecrits, par cause :")
+for c_, (n_, t2_) in sorted(gros.items(), key=lambda x: -x[1][1]):
+    print(f"    {c_:<42} {n_:>4} appels  {t2_/1e6:>5.1f}M = {100*t2_/max(sum(ecrits),1):>4.1f}% de l'ecriture")
+if debuts:
+    d_ = sorted(debuts)
+    print(f"  premier appel de session (socle + reprise eventuelle) : {len(d_)} sessions,"
+          f" mediane {d_[len(d_)//2]/1e3:.0f}k   p90 {d_[int(len(d_)*.9)]/1e3:.0f}k   max {d_[-1]/1e3:.0f}k"
+          f"   dont {sum(1 for x in d_ if x > 60_000)} au-dessus de 60k (reprises)")
+print(f"  prefixes reecrits a chaud (compactage, changement de modele, invalidation) : {len(reecrits)} appels,"
+      f" {sum(x[0] for x in reecrits)/1e6:.1f}M = {100*sum(x[0] for x in reecrits)/max(sum(ecrits),1):.0f}% de l'ecriture")
+par_s = defaultdict(lambda: [0, 0])
+for cw_, p_, s_ in reecrits:
+    par_s[(p_, s_)][0] += 1; par_s[(p_, s_)][1] += cw_
+for (p_, s_), (n_, w_) in sorted(par_s.items(), key=lambda x: -x[1][1])[:5]:
+    print(f"    {p_[-30:]:30s} {s_}  {n_:3d} fois  {w_/1000:5.0f}k")
+# Compactages : un seuil trop proche du socle reinjecte declenche des rafales.
+if compacts:
+    med = lambda l: sorted(l)[len(l)//2] if l else 0
+    print(f"  compactages : {len(compacts)}, par seuil de declenchement (preTokens) :")
+    for nom, bas, haut in (("< 90k (fenetre 100k)", 0, 90_000), ("90-140k (fenetre 150k)", 90_000, 140_000), (">= 140k", 140_000, 10**9)):
+        sel = [x for x in compacts if bas <= x[1] < haut]
+        if not sel:
+            continue
+        ap = [x[2] for x in sel if x[2]]
+        marge = [x[1] - x[2] for x in sel if x[2]]
+        # ecart entre deux compactages consecutifs de la meme session
+        ec = []
+        der = {}
+        for x in sorted(sel, key=lambda x: x[0] or 0):
+            k = (x[5], x[6])
+            if k in der and x[0] and der[k]:
+                ec.append((x[0] - der[k]) / 60)
+            der[k] = x[0]
+        print(f"    {nom:<24} {len(sel):3d} fois  avant {med([x[1] for x in sel])/1e3:4.0f}k  repart a {med(ap)/1e3:4.0f}k"
+              f"  marge {med(marge)/1e3:4.0f}k  appels entre deux {med([x[4] for x in sel]):3d}"
+              f"  ecart median {med(ec):4.0f} min  rafales (< 10 min) {sum(1 for e in ec if e < 10):2d}"
+              f"  reecrit {sum(x[3] for x in sel)/1e6:.1f}M")
+    par_c = defaultdict(list)
+    for x in compacts:
+        par_c[(x[5], x[6])].append(x)
+    for (p_, s_), l in sorted(par_c.items(), key=lambda x: -len(x[1]))[:5]:
+        print(f"    {p_[-30:]:30s} {s_}  {len(l):3d} fois  avant {med([x[1] for x in l])/1e3:4.0f}k"
+              f"  repart a {med([x[2] for x in l if x[2]])/1e3:4.0f}k  reecrit {sum(x[3] for x in l)/1e3:5.0f}k")
+nm = len(outils_par_msg) or 1
+seuls = sum(1 for v in outils_par_msg.values() if v == 1)
+print(f"  appels avec outils : {100*seuls/nm:.0f}% lancent un seul outil, {100*(nm-seuls)/nm:.0f}% en groupent plusieurs")
 
 print("\n=== Equivalent API en $ (poids sur les limites de l'abonnement) ===")
 tot_usd = sum(dollars.values()) or 1

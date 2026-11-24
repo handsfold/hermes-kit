@@ -13,7 +13,7 @@ Retouche: R13
  1 file changed, 14 insertions(+)
 
 diff --git a/hermes_cli/cli_commands_mixin.py b/hermes_cli/cli_commands_mixin.py
-index bca45fcf51..7bae59a673 100644
+index bca45fcf511..7bae59a673f 100644
 --- a/hermes_cli/cli_commands_mixin.py
 +++ b/hermes_cli/cli_commands_mixin.py
 @@ -899,6 +899,20 @@ class CLICommandsMixin:

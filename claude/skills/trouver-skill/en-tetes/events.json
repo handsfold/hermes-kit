@@ -1,0 +1,12 @@
+{
+  "accroche": "Événements : planification et marketing.",
+  "fait": "Planifie et évalue événements, conférences, webinaires, stands et suivi commercial.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /events » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/events(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "ff4a129d7d90ffe2",
+  "date": "2026-11-21"
+}

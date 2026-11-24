@@ -113,6 +113,15 @@ main>h2:first-child{margin-top:6px}
 .rep summary em{font-style:normal;font-size:13px;font-variant-numeric:tabular-nums}
 .rep[open]>:last-child{margin-bottom:6px}
 .actions{display:flex;gap:8px;margin-top:12px}
+.mt{display:flex;gap:22px;border-bottom:1px solid var(--trait);margin:0 2px 4px}
+.mt button{background:none;border:0;padding:8px 0 10px;font:inherit;font-size:15px;font-weight:600;color:var(--t3);border-bottom:2px solid transparent;margin-bottom:-1px}
+.mt button.on{color:var(--texte);border-bottom-color:var(--texte)}
+.mt i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--vert);margin-left:7px;vertical-align:middle}
+.ml{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--t3);padding:2px 2px 8px}
+.ml button{background:none;border:0;padding:6px 0;font:inherit;font-size:13px;color:var(--t2);text-decoration:underline;text-underline-offset:3px}
+.sw{display:flex;gap:6px}.sw button{flex:1;height:44px;border-radius:10px;border:1px solid var(--trait);background:var(--surface);color:var(--t2);font:inherit;font-size:15px;font-weight:600}
+.sw button.on{background:rgba(61,194,122,.16);border-color:var(--vert);color:var(--texte)}
+.sw button[disabled]{opacity:.5}
 .btn{flex:1;height:44px;border-radius:10px;border:1px solid var(--trait);background:var(--surface);color:var(--texte);
 font:600 15px system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn:active{background:var(--haute)}
@@ -208,7 +217,8 @@ h2{font-size:12px;margin:10px 4px 4px}
 .act .onglets{display:flex;gap:2px;margin:14px 0 0;padding:2px;border:0;background:var(--surface);border-radius:9px}
 .act .onglets .ong{flex:1;flex-direction:row;gap:6px;min-height:30px;padding:0 4px;border:0;border-radius:7px;background:none;color:var(--t2);position:relative}
 .act .onglets .ong::after{content:"";position:absolute;inset:-7px 0}
-.act .onglets .ong.on{background:var(--haute);color:var(--texte)}
+.act .onglets .ong.on{background:rgba(95,143,239,.18);color:var(--texte);box-shadow:inset 0 -2px 0 var(--bleu)}
+.act .onglets .ong.on em{color:var(--t2)}
 .act .onglets .ong b{font-size:12px}.act .onglets .ong em{font-size:11px;color:var(--t3)}
 .act section.or{padding:0 2px}
 .act .or-tete{border:0;background:none;border-radius:0;min-height:44px;padding:0;margin:0;width:100%}
@@ -258,6 +268,13 @@ h2{margin-top:22px}
 header{height:calc(48px + env(safe-area-inset-top))}
 .avis{bottom:8px}
 }
+
+/* Tactile : pas de cadre bleu au toucher (retour de Vin 16/11) */
+html{-webkit-tap-highlight-color:transparent}
+@media (pointer:coarse){
+  button,a,summary,[role=button],[role=tab],[onclick],[tabindex]{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+  button:focus,button:focus-visible,a:focus,a:focus-visible,summary:focus,summary:focus-visible,[role=button]:focus-visible,[role=tab]:focus-visible,[onclick]:focus,[onclick]:focus-visible,[tabindex]:focus,[tabindex]:focus-visible{outline:none !important;box-shadow:none}
+}
 </style>
 </head>
 <body>
@@ -275,7 +292,7 @@ const MOTS = {fini:"Atteint", arrete:"Arrêté", sans_goal:"Aucun goal", en_cour
   pause:"À l'arrêt", programme:"Programmé", introuvable:"Introuvable"};
 const DOC = '<svg class="doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>';
 const CHEV = '<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>';
-let orData = null, orMaj = 0, liste = null, rapports = null, texteRapport = {}, arbres = {}, horsligne = false, rapide = 0, minuteur = null;
+let orData = null, orMaj = 0, liste = null, rapports = null, conversations = null, texteRapport = {}, arbres = {}, horsligne = false, rapide = 0, minuteur = null;
 
 function esc(s){return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
@@ -433,7 +450,7 @@ function blocGraphiques(q){
   const sem = g.sem ? `<span style="${g.sem.fin_sem > 100 ? "color:var(--orange)" : ""}">fin ${g.sem.fin_sem} %</span>` : "";
   const jour = g.fin != null ? `<span style="${g.fin >= 100 ? "color:var(--orange)" : g.fin >= 80 ? "color:var(--ambre)" : ""}">fin ~${nb(g.fin, 0)} %</span>` : "";
   const nbSem = Math.ceil(g.jours.filter(j => j.usd > 0 || j.pct != null).length / 7);
-  const ong = localStorage.getItem("onglet-quota") || "";
+  const ong = window.__ongQ || "jour";
   const volets = [
     ["jour", "Heures", jour, courbeJour(g)],
     ["sem", "Semaine", sem, statsSemaine(g)],
@@ -516,8 +533,8 @@ function blocOpenRouter(o){
   </div></section>`;
 }
 function ongletQuota(cle){
-  const deja = localStorage.getItem("onglet-quota") === cle, nouveau = deja ? "" : cle;
-  localStorage.setItem("onglet-quota", nouveau);
+  const nouveau = cle;
+  window.__ongQ = nouveau;
   document.querySelectorAll(".ong").forEach(b => b.classList.toggle("on", b.dataset.ong === nouveau));
   document.querySelectorAll(".volet").forEach(d => d.hidden = d.dataset.volet !== nouveau);
 }
@@ -533,6 +550,31 @@ function blocQuota(q){
    ${jauge("Semaine", q.sem_pct, "remise à zéro " + q.sem_raz)}
    ${jauge("5 heures", q.h5_pct, "remise à zéro " + q.h5_raz)}
    </div>${blocGraphiques(q)}</section>`;
+}
+
+function blocMoteurs(){
+  const m = liste.moteur || {choix: [], mode: ""};
+  const vue = localStorage.getItem("vue-moteur") || (m.mode === "claude" || m.mode === "chatgpt" ? m.mode : "claude");
+  const tabs = m.choix.map(c => `<button class="${c.mode === vue ? "on" : ""}" data-vm="${c.mode}">${esc(c.nom)}${c.mode === m.mode ? "<i></i>" : ""}</button>`).join("");
+  const c = m.choix.find(x => x.mode === vue) || {nom: vue, modele: ""};
+  const actif = vue === m.mode;
+  const ligne = `<div class="ml"><span>${actif ? "Moteur actif · " + esc(m.modele) : esc(c.modele)}</span>${actif ? "" : `<button data-moteur="${vue}">Utiliser ${esc(c.nom)}</button>`}</div>`;
+  return `<div class="mt">${tabs}</div>${ligne}` + (vue === "chatgpt" ? blocQuotaGpt(liste.chatgpt) : blocQuota(liste.quota));
+}
+function blocMoteur(m){
+  if (!m || !m.choix) return "";
+  const note = m.mode === "autre" ? "autre moteur : " + esc(m.modele) : esc(m.modele);
+  return `<section><div class="st"><h3>Moteur</h3><small>${note}</small></div><div class="sw">`
+    + m.choix.map(c => `<button class="${c.mode === m.mode ? "on" : ""}" data-moteur="${c.mode}">${esc(c.nom)}</button>`).join("")
+    + `</div></section>`;
+}
+function blocQuotaGpt(q){
+  if (!q) return "";
+  if (q.erreur) return `<section><div class="st"><h3>Quota ChatGPT</h3></div><div class="sous">${esc(q.erreur)}</div></section>`;
+  const jauge = (nom, pct, tip) => pct == null ? "" : `<div class="j" title="${esc(tip)}"><label>${nom}</label><b class="${pct >= 100 ? "x" : pct >= 80 ? "w" : ""}">${pct}<u>%</u></b>${barre(pct, neutre(pct))}</div>`;
+  const etat = [q.plan ? "plan " + q.plan : "", q.limite ? "limite atteinte" : "", q.age_min > 10 ? `mesuré il y a ${q.age_min} min` : ""].filter(Boolean).join(" · ");
+  return `<section><div class="st"><h3>Quota ChatGPT</h3>${etat ? `<small>${esc(etat)}</small>` : ""}</div><div class="jauges">
+   ${jauge("5 heures", q.h5_pct, "remise à zéro " + q.h5_raz)}${jauge("Semaine", q.sem_pct, "remise à zéro " + q.sem_raz)}</div></section>`;
 }
 
 function infoMission(m){
@@ -696,6 +738,13 @@ async function rendre(){
 
   if (r[0] === "r" && r[1]) return vueRapport(r[1], v, html);
 
+  if (r[0] === "conversations"){
+    $("#titre").textContent = "Conversations";
+    html += fil([["#/", "Activité"], ["#/conversations", "Conversations"]]);
+    html += blocConversations();
+    v.innerHTML = html; return;
+  }
+
   if (r[0] === "taches"){
     $("#titre").textContent = "Tâches automatiques";
     html += fil([["#/", "Activité"], ["#/taches", "Tâches"]]);
@@ -737,18 +786,36 @@ async function rendre(){
   // USER, 2026-10-13 : ni le mode de lecture ni la liste des rapports sur l'Accueil.
   // Refonte 2026-10-25 : a plat, sans cartes, un bloc par sujet, separes par un filet.
   const gs = liste.goals || [];
-  html += '<div class="act">' + blocQuota(liste.quota) + blocOpenRouter(orData)
+  html += '<div class="act">' + blocMoteurs() + blocOpenRouter(orData)
     + (gs.length ? '<section><div class="st"><h3>Goals</h3><small>' + gs.length + '</small></div>' + gs.map(carteGoal).join("") + "</section>" : "") + "</div>";
   // USER, 2026-10-25 : ni la section Missions ni le lien Taches automatiques sur l'Activite.
+  // USER, 2026-11-16 : plus de bloc Conversations sur l'Activite (la page #/conversations reste joignable).
   v.innerHTML = html;
 }
 function fil(miettes){ return '<nav class="fil">' + miettes.map(([h, t]) => `<a href="${h}">${esc(t)}</a>`).join("") + "</nav>"; }
+function iconeConv(c){ return c.icone ? c.icone + " " : ""; }
+function metaConv(c){
+  const p = [];
+  if (c.moteur) p.push(c.moteur);
+  if (c.projet) p.push(c.projet);
+  p.push(c.messages + " message" + (c.messages > 1 ? "s" : ""));
+  if (c.cible_telegram) p.push(c.cible_telegram);
+  if (c.parent_id) p.push("sous-topic");
+  return p.join(" · ");
+}
+function blocConversations(){
+  const cs = (conversations && conversations.conversations) || [];
+  if (!cs.length) return '<div class="vide">Aucune conversation.</div>';
+  return '<div class="liste">' + cs.map(c => `<div class="el"><div class="nom"><div>${iconeConv(c)}${esc(c.titre)}</div>
+    <small>${esc(metaConv(c))}</small></div></div>`).join("") + "</div>";
+}
 
 // ---------------------------------------------------------------- donnees
 async function charger(){
   try { liste = await api("liste"); horsligne = false; }
   catch (e){ horsligne = true; }
   try { rapports = await api("rapports"); } catch (e){}
+  try { conversations = await api("conversations"); } catch (e){}
   if (Date.now() - orMaj > 120000){ try { orData = await api("openrouter"); orMaj = Date.now(); } catch (e){} }
   const r = route();
   if (r[0] === "m" && r[1] && arbres[r[1]]) await chargerArbre(r[1]);
@@ -817,6 +884,8 @@ document.addEventListener("click", e => {
       : "Mettre " + (m ? m.nom : "la mission") + " en pause ?", () => agir("stop", {id: b.dataset.stop}, b),
       tourne ? "Arrêter" : "Mettre en pause", "orange");
   }
+  else if (b.dataset.vm){ localStorage.setItem("vue-moteur", b.dataset.vm); rendre(); }
+  else if (b.dataset.moteur) agir("moteur", {mode: b.dataset.moteur}, b);
   else if (b.dataset.mode) basculer(b.dataset.mode, b);
   else if (b.dataset.ecoute) ecouter(b.dataset.ecoute, b);
   else if (b.dataset.ouvre) location.hash = "#/m/" + b.dataset.ouvre;

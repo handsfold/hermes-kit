@@ -1,0 +1,14 @@
+{
+  "accroche": "Conseil marketing : compare des avis d’experts.",
+  "fait": "Simule un conseil de 3 à 5 spécialistes du marketing, avec cadres documentés, désaccords utiles et synthèse. Aucun expert réel n’est consulté.",
+  "pas_pour": "Pas pour exécuter la campagne (voir marketing), ni prétendre qu’un expert réel a donné son avis.",
+  "quand": "USER dit « simule un conseil marketing », « que diraient Ogilvy et Godin ? », « compare plusieurs avis sur cette stratégie ». Aussi quand une décision marketing gagne à tester des cadres opposés.",
+  "motifs": [
+    "(?i)\\b(?:simule|simuler)\\b.{0,30}\\b(?:conseil|comité|board)\\b.{0,25}\\bmarketing\\b",
+    "(?i)\\b(?:conseil|comité|board)\\b.{0,20}\\bmarketing\\b",
+    "(?i)\\b(?:que dirait|que diraient|qu\\x27en penserait|qu\\x27en diraient)\\b.{0,35}\\b(?:Godin|Ogilvy|Hormozi|Dunford|Sharp|Sutherland|Hopkins|Halbert|Handley)\\b",
+    "(?i)\\b(?:plusieurs avis|plusieurs points de vue|avis d.experts)\\b.{0,35}\\b(?:marketing|marque|positionnement|offre|lancement|prix|stratégie)\\b"
+  ],
+  "origine_sha": "184449a9a0374c62",
+  "date": "2026-11-21"
+}

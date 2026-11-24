@@ -1,0 +1,12 @@
+{
+  "accroche": "Attribution : mesurer la contribution.",
+  "fait": "Évalue la contribution des canaux au revenu et les modèles d’attribution, incrémentalité et mesure déclarative.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /attribution » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/attribution(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "d7a33ce0d1fbb8b1",
+  "date": "2026-11-21"
+}

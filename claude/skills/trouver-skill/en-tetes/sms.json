@@ -1,0 +1,12 @@
+{
+  "accroche": "SMS : marketing et conformité.",
+  "fait": "Conçoit et évalue le marketing par SMS, MMS et WhatsApp, avec ses contraintes de conformité.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /sms » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/sms(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "83adca62a5d43a74",
+  "date": "2026-11-21"
+}

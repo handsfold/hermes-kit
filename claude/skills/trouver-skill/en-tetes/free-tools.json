@@ -1,0 +1,12 @@
+{
+  "accroche": "Outils gratuits : leviers marketing.",
+  "fait": "Évalue et conçoit des outils gratuits interactifs utilisés comme levier marketing.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /free-tools » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/free\\-tools(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "7265adcd4474585c",
+  "date": "2026-11-21"
+}

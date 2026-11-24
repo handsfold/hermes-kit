@@ -1,0 +1,12 @@
+{
+  "accroche": "Prototype jetable pour répondre à une question de design.",
+  "fait": "Construit un prototype jetable pour éprouver un modèle d’état, une logique ou une interface.",
+  "pas_pour": "Pas pour produire le code de production final ; (voir trouver-skill)",
+  "quand": "USER dit « /prototype » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/prototype(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "06f91a615d3d5b65",
+  "date": "2026-11-21"
+}

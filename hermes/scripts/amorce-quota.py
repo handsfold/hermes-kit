@@ -12,9 +12,9 @@ Pourquoi
     est toujours en cours, et le pire temps d'attente tombe a quelques minutes.
 
 Cout
-    1 ping par fenetre et par fournisseur. Claude ~33 k tokens, Codex ~17 k.
-    Soit moins de 1 % d'une fenetre de 5 M. Le ping tourne dans un dossier vide
-    pour ne pas charger les CLAUDE.md et AGENTS.md de projet.
+    Le passage automatique ne ping que Codex. Claude reste disponible seulement
+    avec `--seul claude`, sur demande explicite. Le ping tourne dans un dossier
+    vide pour ne pas charger les CLAUDE.md et AGENTS.md de projet.
 
 Sources de verite
     Codex   `resets_at` (epoch) est ecrit tel quel dans les rollouts JSONL.
@@ -28,6 +28,7 @@ Usage
 """
 import json, os, subprocess, sys, time, glob, datetime
 from qg_adresse import adresse
+from modeles_central import codex_prompt
 
 FENETRE = 5 * 3600
 MARGE = 30          # secondes apres l'expiration, pour ne pas tomber trop tot
@@ -35,8 +36,8 @@ GARDE = 4.5 * 3600  # jamais 2 pings d'affilee dans cet intervalle
 ETAT = os.path.expanduser("~/.hermes/amorce-quota.json")
 JOURNAL = os.path.expanduser("~/.hermes/amorce-quota.log")
 BAC = "/tmp/amorce-quota"
-CODEX = "/usr/lib/chatgpt/resources/codex"
 ENV = os.path.expanduser("~/.hermes/.env")
+MODELES_CENTRAL = os.path.expanduser("~/.hermes/models-central.json")
 CHAT, THREAD = adresse()
 
 
@@ -101,10 +102,13 @@ def fin_fenetre_codex():
 
 
 def ping_codex():
-    return subprocess.run(
-        [CODEX, "exec", "--skip-git-repo-check",
-         "-c", 'model_reasoning_effort="low"', "ok"],
-        cwd=BAC, capture_output=True, timeout=240).returncode
+    try:
+        codex_prompt("ok", caller="systemd:amorce-quota.service",
+                     role="quotidien_hermes", timeout=240, ephemeral=False)
+        return 0
+    except Exception as e:
+        note(f"codex: ping échoué ({type(e).__name__})")
+        return 1
 
 
 # --------------------------------------------------------------- Claude
@@ -181,7 +185,11 @@ def ping_claude():
     # --output-format json : usage-timer.py note la consommation du ping dans
     # proxy-usage.jsonl, attribuee au timer (cockpit, 2026-10-22).
     r = subprocess.run(
-        ["claude", "-p", "ok", "--model", "claude-haiku-5-5", "--output-format", "json"],
+        # Texte seul : sans outils, MCP ni fichiers d'instructions, le ping ouvre
+        # la fenetre pour ~1k tokens au lieu de ~34k ponderes (13/11/2026).
+        ["claude", "-p", "ok", "--model", modele_claude_ping(), "--output-format", "json",
+         "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+         "--mcp-config", '{"mcpServers":{}}'],
         cwd=BAC, capture_output=True, text=True, timeout=240)
     try:
         subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "usage-timer.py")],
@@ -191,12 +199,20 @@ def ping_claude():
     return r.returncode
 
 
+def modele_claude_ping():
+    """Modèle Claude réservé au passage demandé explicitement."""
+    with open(MODELES_CENTRAL, encoding="utf-8") as f:
+        d = json.load(f)
+    modele = (((d.get("principal_claude") or {}).get("familles") or {}).get("haiku"))
+    if not modele:
+        raise ValueError("principal_claude.familles.haiku absent de models-central.json")
+    return modele
+
+
 # ----------------------------------------------------------------- boucle
 
-FOURNISSEURS = [
-    ("codex", fin_fenetre_codex, ping_codex),
-    ("claude", fin_fenetre_claude, ping_claude),
-]
+FOURNISSEURS = [("codex", fin_fenetre_codex, ping_codex)]
+FOURNISSEUR_CLAUDE = ("claude", fin_fenetre_claude, ping_claude)
 
 
 def main():
@@ -214,7 +230,8 @@ def main():
     etat = etat_lu()
     maintenant = time.time()
 
-    for nom, lire_fin, ping in FOURNISSEURS:
+    fournisseurs = FOURNISSEURS + ([FOURNISSEUR_CLAUDE] if seul == "claude" else [])
+    for nom, lire_fin, ping in fournisseurs:
         if seul and nom != seul:
             continue
         try:

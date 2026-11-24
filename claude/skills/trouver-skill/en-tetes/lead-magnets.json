@@ -1,0 +1,12 @@
+{
+  "accroche": "Lead magnets : contenus à offrir.",
+  "fait": "Conçoit ou améliore des contenus à offrir en échange de coordonnées et les formulaires associés.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /lead-magnets » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/lead\\-magnets(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "755e6a4f977c5888",
+  "date": "2026-11-21"
+}

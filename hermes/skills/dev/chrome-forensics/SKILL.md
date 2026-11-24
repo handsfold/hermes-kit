@@ -2,12 +2,13 @@
 name: chrome-forensics
 description: Lire bookmarks, historique, cookies Chrome sans le fermer.
 version: 1.0.0
+disable-model-invocation: true
 ---
 
 # Chrome Forensics: Lecture sans fermer le navigateur
 
 Quand Chrome est ouvert, SQLite locke `History`, `Cookies`, `Login Data`. Impossible
-de les lire directement. Solution : copier les fichiers dans `/tmp` d'abord.
+de les lire directement. Solution, copier les fichiers dans `/tmp` d'abord.
 
 ## Profils Vin
 

@@ -1,0 +1,12 @@
+{
+  "accroche": "Interroger sur les specs de workflows à construire.",
+  "fait": "Mène un entretien sur les spécifications des workflows à construire dans l’espace de travail.",
+  "pas_pour": "Pas pour préciser un plan non lié à un workflow ; (voir trouver-skill)",
+  "quand": "USER dit « /loop-me » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/loop\\-me(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "21793f6f3aaadcb1",
+  "date": "2026-11-21"
+}

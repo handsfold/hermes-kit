@@ -1,0 +1,12 @@
+{
+  "accroche": "Cartographier un vaste chantier en tickets de décision.",
+  "fait": "Planifie un travail trop vaste pour une session comme une carte partagée de tickets de décision à résoudre jusqu’à clarifier la destination.",
+  "pas_pour": "Pas pour un petit chantier réalisable en une session ; (voir trouver-skill)",
+  "quand": "USER dit « /wayfinder » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/wayfinder(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "93fcec7ba1a0379b",
+  "date": "2026-11-21"
+}

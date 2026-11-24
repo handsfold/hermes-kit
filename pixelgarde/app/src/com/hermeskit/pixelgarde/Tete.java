@@ -499,6 +499,10 @@ final class Tete extends TextView {
             l = -0.16f + 0.07f * (float) Math.sin(t * 0.8f);
             g = -0.05f + 0.09f * (float) Math.sin(t * 1.6f);
             r = 0.05f * (float) Math.sin(t * 0.55f);
+        } else if ("voixveille".equals(etat)) {
+            // Endormi (mot de reveil attendu) : tete penchee, respiration tres lente.
+            l = 0.26f + 0.02f * (float) Math.sin(t * 0.5f);
+            g = 0.10f; r = -0.04f;
         } else if ("capture".equals(etat)) {
             // L'enregistrement est le seul etat qui laisse une trace sur le
             // disque. Elle se fige, droite et frontale : l'immobilite tranche

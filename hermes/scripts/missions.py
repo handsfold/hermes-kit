@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from modeles_central import lire_central
 
 HOME = os.path.expanduser("~")
 HERMES = os.path.join(HOME, ".hermes")
@@ -135,6 +136,90 @@ def quota():
             "h5_pct": round(p5), "h5_raz": hhmm(f5.get("resets_at")),
             "age_min": age // 60, "en_pause": bool(e.get("en_pause")),
             "graph": quota_graph(e, p7, date_iso(f7.get("resets_at")), budget, utilise)}
+
+
+# ---------------------------------------------------------------- ChatGPT et moteur
+# USER, 2026-11-16 : voir le quota de l'abonnement ChatGPT et choisir Claude ou
+# ChatGPT depuis l'Activite. Le quota vient de chatgpt.com (wham/usage) avec le
+# jeton du proxy Codex, lu sans jamais l'afficher ni le recopier. Cache 2 min.
+CODEX_AUTH = os.path.join(HOME, ".local", "share", "cliproxyapi", "auth")
+CACHE_GPT = os.path.join(HERMES, "cache", "chatgpt-quota.json")
+def moteurs_centrales():
+    d = lire_central()
+    return {
+        "claude": ("routeur", d["principal_claude"]["modele"], "Claude"),
+        "chatgpt": (d["quotidien_hermes"]["provider"],
+                    d["quotidien_hermes"]["modele"], "ChatGPT"),
+    }
+
+
+MOTEURS = moteurs_centrales()
+HERMES_BIN = os.path.join(HOME, ".local", "bin", "hermes")
+JOURNAL_MOTEUR = os.path.join(HERMES, "state", "moteur-llm.log")
+
+
+def _fenetre(w):
+    if not isinstance(w, dict) or w.get("used_percent") is None:
+        return None, ""
+    return round(float(w["used_percent"])), hhmm(datetime.fromtimestamp(w["reset_at"], TZ).isoformat()) if w.get("reset_at") else ""
+
+
+def chatgpt():
+    """Quota ChatGPT : 5 h et semaine. Une erreur donne {"erreur": ...}, jamais un faux 0 %."""
+    c = lire_json(CACHE_GPT, {})
+    if c.get("t") and time.time() - c["t"] < 120 and c.get("quota"):
+        q = dict(c["quota"]); q["age_min"] = int((time.time() - c["t"]) // 60); return q
+    import urllib.request
+    fichiers = sorted(glob.glob(os.path.join(CODEX_AUTH, "codex-*.json")), key=os.path.getmtime, reverse=True)
+    if not fichiers:
+        return {"erreur": "aucun compte Codex dans le proxy"}
+    try:
+        a = lire_json(fichiers[0], {})
+        req = urllib.request.Request("https://chatgpt.com/backend-api/wham/usage", headers={
+            "Authorization": "Bearer " + a.get("access_token", ""), "chatgpt-account-id": a.get("account_id", ""),
+            "User-Agent": "codex_cli_rs/0.1"})
+        d = json.loads(urllib.request.urlopen(req, timeout=15).read())
+        rl = d.get("rate_limit") or {}
+        p5, r5 = _fenetre(rl.get("primary_window"))
+        p7, r7 = _fenetre(rl.get("secondary_window"))
+        q = {"plan": d.get("plan_type") or "?", "h5_pct": p5, "h5_raz": r5, "sem_pct": p7, "sem_raz": r7,
+             "limite": bool(rl.get("limit_reached")), "age_min": 0}
+        os.makedirs(os.path.dirname(CACHE_GPT), exist_ok=True)
+        with open(CACHE_GPT, "w") as f:
+            json.dump({"t": time.time(), "quota": q}, f)
+        return q
+    except Exception as e:
+        if c.get("quota"):
+            q = dict(c["quota"]); q["age_min"] = int((time.time() - c.get("t", 0)) // 60); return q
+        return {"erreur": "lecture du quota ChatGPT impossible (" + type(e).__name__ + ")"}
+
+
+def moteur():
+    """Le moteur par defaut d'Hermes : claude, chatgpt ou autre."""
+    prov, mod = "", ""
+    try:
+        import yaml
+        m = (yaml.safe_load(open(os.path.join(HERMES, "config.yaml"))) or {}).get("model") or {}
+        prov, mod = m.get("provider", ""), m.get("default", "")
+    except Exception:
+        pass
+    mode = next((k for k, v in MOTEURS.items() if v[0] == prov), "autre")
+    return {"mode": mode, "provider": prov, "modele": mod,
+            "choix": [{"mode": k, "nom": v[2], "modele": v[1]} for k, v in MOTEURS.items()]}
+
+
+def moteur_regler(mode):
+    if mode not in MOTEURS:
+        return False, "Moteur inconnu."
+    prov, mod, nom = MOTEURS[mode]
+    for cle, val in (("model.default", mod), ("model.provider", prov)):
+        r = subprocess.run([HERMES_BIN, "config", "set", cle, val], capture_output=True, text=True, timeout=30)
+        if r.returncode:
+            return False, "Réglage refusé : " + (r.stderr or r.stdout).strip()[:120]
+    os.makedirs(os.path.dirname(JOURNAL_MOTEUR), exist_ok=True)
+    with open(JOURNAL_MOTEUR, "a") as f:
+        f.write("{} {} {}/{}\n".format(datetime.now(TZ).isoformat(timespec="seconds"), mode, prov, mod))
+    return True, "Moteur : {} ({}). Pris en compte aux nouvelles conversations.".format(nom, mod)
 
 
 HISTO = os.path.join(HERMES, "quota-historique.jsonl")
@@ -368,7 +453,7 @@ def liste():
     autres.sort(key=lambda a: (a["etat"] != "en_cours", a["_t"]))
     for a in autres:
         a.pop("_t")
-    return {"quota": quota(), "missions": [resume(m) for m in ms], "taches": autres, **goals(),
+    return {"quota": quota(), "chatgpt": chatgpt(), "moteur": moteur(), "missions": [resume(m) for m in ms], "taches": autres, **goals(),
             "heure": datetime.now(TZ).strftime("%H:%M:%S")}
 
 
@@ -1197,6 +1282,14 @@ def main(a):
         ok, msg = goal_supprimer(a[1]) if a[2] == "supprimer" else goal_action(a[1], a[2])
         print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False) if "--json" in a else msg)
         return 0 if ok else 1
+    elif c == "chatgpt":
+        print(json.dumps(chatgpt(), ensure_ascii=False))
+    elif c == "moteur":
+        if len(a) > 1 and a[1] != "--json":
+            ok, msg = moteur_regler(a[1])
+            print(json.dumps({"ok": ok, "message": msg, "moteur": moteur()}, ensure_ascii=False))
+            return 0 if ok else 1
+        print(json.dumps(moteur(), ensure_ascii=False))
     elif c == "libelle":
         print(libelle())
     elif c == "ajoute" and len(a) > 4:

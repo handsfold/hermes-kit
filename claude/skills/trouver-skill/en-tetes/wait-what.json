@@ -1,0 +1,12 @@
+{
+  "accroche": "Reformuler quand le dernier message n’a pas été compris.",
+  "fait": "Invite à reprendre une explication qui n’a pas été comprise, avec du contexte et un anglais technique simplifié.",
+  "pas_pour": "Pas pour approfondir un sujet déjà compris ; (voir trouver-skill)",
+  "quand": "USER dit « /wait-what » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/wait\\-what(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "72b496119461bad8",
+  "date": "2026-11-21"
+}

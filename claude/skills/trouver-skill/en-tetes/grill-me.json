@@ -1,0 +1,12 @@
+{
+  "accroche": "Entretien exigeant pour affiner un plan ou un design.",
+  "fait": "Mène un entretien exigeant pour affiner un plan ou une conception.",
+  "pas_pour": "Pas pour explorer un sujet sans plan ni conception à éprouver ; (voir trouver-skill)",
+  "quand": "USER dit « /grill-me » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/grill\\-me(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "38c0c8b65fc72980",
+  "date": "2026-11-21"
+}

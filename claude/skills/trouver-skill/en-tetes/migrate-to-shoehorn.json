@@ -1,0 +1,12 @@
+{
+  "accroche": "Remplacer les assertions de type `as` dans les tests.",
+  "fait": "Migre les fichiers de test des assertions `as` vers @total-typescript/shoehorn.",
+  "pas_pour": "Pas pour modifier les assertions dans le code de production ; (voir trouver-skill)",
+  "quand": "USER dit « /migrate-to-shoehorn » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/migrate\\-to\\-shoehorn(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "06a1ca2e89ecb9e7",
+  "date": "2026-11-21"
+}

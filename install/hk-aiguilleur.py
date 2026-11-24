@@ -56,6 +56,7 @@ DEFAUT = {
     "z_complement": 4.0,
     "max_skills": 2,
     "max_chars": 9000,
+    "pointeur": True,  # pointer only (name, description, path): a wrong pick costs ~300 chars
     "min_mots": 3,
 }
 QUOTE = re.compile(r"«\s*([^«»]{3,120}?)\s*»")
@@ -112,8 +113,8 @@ def desactivees():
 
 def skills():
     """{name: {path, desc, when, body, units}} for every installed skill, first root wins."""
-    off, out = desactivees(), {}
-    for i, racine in enumerate(RACINES):
+    out = {}
+    for racine in RACINES:
         if not racine.exists():
             continue
         # os.walk with followlinks: rglob skips linked folders, and a skill
@@ -313,6 +314,14 @@ def injection(idx, res, racine_vue=None, conf=None):
     """Text appended to the user message: the SKILL.md bodies, already loaded."""
     conf = conf or config()
     morceaux, budget = [], conf["max_chars"]
+    if conf.get("pointeur"):
+        return "\n\n".join(
+            f"[Skill router: the skill '{n}' may match this message (route: {res['voie']}). "
+            f"{idx.skills[n]['desc']} Load it with skill_view(name='{n}') if it applies; "
+            f"files in {racine_vue + '/' + n if racine_vue else idx.skills[n]['path']}. "
+            f"Otherwise ignore.]"
+            for n in res["choix"]
+        )
     # A companion (USER's rules for a third-party skill) keeps its room: the long
     # third-party body would otherwise eat the whole budget and drop it.
     reserve = {
@@ -724,8 +733,13 @@ def diagnostic_http(exc):
     error = payload.get("error", {}) if isinstance(payload, dict) else {}
     if not isinstance(error, dict):
         error = {}
-    safe = lambda v: str(v) if isinstance(v, (str, int)) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(v)) else "-"
-    message = str(error.get("message") or payload.get("message") or "") if isinstance(payload, dict) else ""
+
+    def safe(v):
+        ok = isinstance(v, (str, int)) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(v))
+        return str(v) if ok else "-"
+
+    brut = payload if isinstance(payload, dict) else {}
+    message = str(error.get("message") or brut.get("message") or "")
     classes = {
         "invalid": r"invalid|malformed|required|missing|must be",
         "model": r"\bmodel\b",
@@ -735,8 +749,9 @@ def diagnostic_http(exc):
         "auth": r"unauthori[sz]ed|forbidden|credential|api key",
         "capacity": r"overload|capacity|busy|temporarily unavailable",
     }
-    flags = ",".join(name for name, pattern in classes.items() if re.search(pattern, message, re.I)) or "-"
-    detail = f"type={safe(error.get('type') or payload.get('type') if isinstance(payload, dict) else '')}"
+    vus = [name for name, pattern in classes.items() if re.search(pattern, message, re.I)]
+    flags = ",".join(vus) or "-"
+    detail = f"type={safe(error.get('type') or brut.get('type'))}"
     detail += f" code={safe(error.get('code'))} param={safe(error.get('param'))} flags={flags}"
     return detail
 

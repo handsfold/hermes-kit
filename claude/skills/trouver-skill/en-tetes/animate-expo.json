@@ -1,0 +1,12 @@
+{
+  "accroche": "Crée des animations pour React Native et Expo.",
+  "fait": "Implémente des animations, gestes et retours haptiques dans Expo.",
+  "pas_pour": "Pas pour animer une interface web (voir trouver-skill).",
+  "quand": "USER dit « /animate-expo » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/animate\\-expo(?![\\w-])"
+  ],
+  "categorie": "design",
+  "origine_sha": "e1150ea72ff31a3d",
+  "date": "2026-11-21"
+}

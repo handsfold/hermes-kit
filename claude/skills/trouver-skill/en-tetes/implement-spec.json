@@ -1,0 +1,12 @@
+{
+  "accroche": "Implémenter en code une spécification et ses tickets.",
+  "fait": "Implémente en code le résultat de /to-spec et /to-tickets.",
+  "pas_pour": "Pas pour élaborer la spécification ou les tickets ; (voir trouver-skill)",
+  "quand": "USER dit « /implement-spec » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/implement\\-spec(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "2b3beb9d7d215cea",
+  "date": "2026-11-21"
+}

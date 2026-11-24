@@ -1,0 +1,12 @@
+{
+  "accroche": "Plan ou spécification → tickets tracer-bullet.",
+  "fait": "Transforme un plan, une spécification ou la conversation en tickets tracer-bullet avec leurs dépendances, publiés dans le suivi configuré.",
+  "pas_pour": "Pas pour implémenter les tickets dans le code ; (voir trouver-skill)",
+  "quand": "USER dit « /to-tickets » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/to\\-tickets(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "c20009989f7c0763",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Assembler la matière brute en séquences.",
+  "fait": "Assemble la matière brute en une progression de séquences, en ancrant chaque terme avant de s’appuyer dessus.",
+  "pas_pour": "Pas pour explorer des fragments sans leur donner une progression ; (voir trouver-skill)",
+  "quand": "USER dit « /writing-beats » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/writing\\-beats(?![\\w-])"
+  ],
+  "categorie": "engineering",
+  "origine_sha": "e99c357cbcbbe3f2",
+  "date": "2026-11-21"
+}

@@ -1,0 +1,12 @@
+{
+  "accroche": "Revue de code : contrôle le diff et la spec.",
+  "fait": "La skill compare un diff depuis un point fixe sur deux axes distincts : normes du dépôt et respect de la spec. Revue en lecture seule, appelée aussi par implement.",
+  "pas_pour": "Pas pour modifier le code (voir construire).",
+  "quand": "USER dit « revue normes/spec », « relis le diff depuis ... », ou invoque la revue après « /implement ». Aussi quand USER veut comparer la spec au code, en lecture seule.",
+  "motifs": [
+    "(?i)(revue.{0,20}(norme|spec)|norme.{0,20}spec|relis.{0,20}diff.{0,20}depuis|diff.{0,20}depuis|/code-review)"
+  ],
+  "categorie": "software-development",
+  "origine_sha": "d26f5e95d247780a",
+  "date": "2026-11-21"
+}

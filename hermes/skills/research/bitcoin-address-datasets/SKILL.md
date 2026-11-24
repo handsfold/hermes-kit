@@ -1,6 +1,7 @@
 ---
 name: bitcoin-address-datasets
 description: Dumps Bitcoin (LoyceV) pour scan local sans réseau.
+disable-model-invocation: true
 ---
 
 Sommaire :
@@ -95,7 +96,7 @@ with open("hashmap_bc1.pkl", "wb") as f:
 
 Problème : `Pool` avec `initializer` + pickle → chaque worker a sa copie → N × 1.4 GB.
 
-Solution : charger dans le parent, `fork`, partager via COW (Linux seulement).
+Solution, charger dans le parent, `fork`, partager via COW (Linux seulement).
 
 ```python
 import multiprocessing as mp

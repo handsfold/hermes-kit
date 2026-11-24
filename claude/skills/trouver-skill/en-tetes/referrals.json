@@ -1,0 +1,12 @@
+{
+  "accroche": "Parrainage : programmes et affiliation.",
+  "fait": "Conçoit des programmes de recommandation et d’affiliation, leurs récompenses, commissions et partenariats.",
+  "pas_pour": "Pas pour les demandes qui ne relèvent pas de cette compétence (voir trouver-skill)",
+  "quand": "USER dit « /referrals » pour charger cette skill.",
+  "motifs": [
+    "(?i)(?<![\\w-])/referrals(?![\\w-])"
+  ],
+  "categorie": "marketing",
+  "origine_sha": "78a1e0da4d520b95",
+  "date": "2026-11-21"
+}

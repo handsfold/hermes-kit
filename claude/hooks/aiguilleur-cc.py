@@ -5,7 +5,7 @@ Pourquoi (2026-10-25) : laisse a lui-meme, le modele charge la bonne skill
 environ 1 fois sur 2 (112 sur 211 declenchements sur 30 jours). Hermes demande
 deja a Sonnet, avant chaque tour, quelle skill le message appelle (plugin
 aiguilleur). Ce hook fait la meme chose dans Claude Code : il envoie le message
-et le catalogue des skills Claude au proxy local (Sonnet sans outils), puis
+et le catalogue des skills Claude au proxy local (Haiku sans outils), puis
 ajoute le SKILL.md choisi au contexte du tour.
 
 Regles :
@@ -32,7 +32,7 @@ SOURCES = [HOME / "Bureau/Projets/perso/agent/hermes-kit/install/hk-aiguilleur.p
            HOME / ".hermes/scripts/hk-aiguilleur.py"]
 JOURNAL = HOME / ".claude/logs/aiguilleur-cc.jsonl"
 CACHE = HOME / ".cache/hermes-kit/aiguilleur/cc-choix.json"
-REGLAGES = {"modele": "claude-sonnet-5-5-notools", "timeout": 15, "min_mots": 3, "min_mots_contexte": 1,
+REGLAGES = {"modele": "claude-haiku-5-5-notools", "url": "http://localhost:8000/anthropic/v1/messages", "timeout": 15, "min_mots": 3, "min_mots_contexte": 1,
             "max_chars": 8500, "cache_max": 500}
 
 
@@ -111,7 +111,7 @@ def main():
         return
     t0 = time.time()
     ligne = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "session": entree.get("session_id", ""),
-             "cwd": entree.get("cwd", "")}
+             "cwd": entree.get("cwd", ""), "modele": REGLAGES["modele"]}
     try:
         mod = module()
         texte = mod.nettoyer(entree.get("prompt") or "")
@@ -139,6 +139,7 @@ def main():
             choix, ligne["voie"] = cache[k], "cache"
         else:
             mod.LLM_MODELE = REGLAGES["modele"]
+            mod.LLM_URL = REGLAGES["url"]
             mod.LLM_APPELANT = "hk-aiguilleur-cc"
             try:
                 txt, _u, _s = mod.appel_llm(systeme, mod.requete(texte, precedent), max_tokens=200,

@@ -24,6 +24,7 @@ Etat : ~/.hermes/quota-veilleur.json. Option --test : poste l'etat courant.
 import json, os, subprocess, sys, time, urllib.request, urllib.parse
 from datetime import datetime, timezone, timedelta
 from qg_adresse import adresse
+from modeles_central import lire_central
 
 HOME = os.path.expanduser("~")
 CREDS = f"{HOME}/.claude/.credentials.json"
@@ -52,13 +53,29 @@ def env(cle):
 # Claude (demande de USER, 2026-10-26 : « switcher sur le modèle que je veux avec le niveau
 # d'intelligence que je veux, appliqué à tous les topics »). Le plugin quota-bouton porte
 # la meme grille (quota:m:<c>, puis quota:t:<c>:<effort>).
-MODELES_CHOIX = {"o": ("claude-opus-5-5", "Opus 5.5"), "s": ("claude-sonnet-5-5", "Sonnet 5.5")}
+def nom_modele(modele):
+    parties = str(modele).removeprefix("claude-").split("-")
+    if len(parties) >= 3 and parties[-2].isdigit() and parties[-1].isdigit():
+        return " ".join(parties[:-2]).title() + f" {parties[-2]}.{parties[-1]}"
+    return " ".join(parties).title()
+
+
+def modeles_choix_central():
+    familles = (lire_central().get("principal_claude") or {}).get("familles") or {}
+    opus, sonnet = familles.get("opus"), familles.get("sonnet")
+    if not opus or not sonnet:
+        raise ValueError("principal_claude.familles incomplet dans models-central.json")
+    return {"o": (opus, nom_modele(opus)), "s": (sonnet, nom_modele(sonnet))}
+
+
+MODELES_CHOIX = modeles_choix_central()
+OPUS, SONNET = MODELES_CHOIX["o"][0], MODELES_CHOIX["s"][0]
 EFFORTS_TOUS = ("low", "medium", "high", "xhigh", "max")
 BOUTONS_SEMAINE = [[{"text": n, "callback_data": f"quota:m:{c}"} for c, (_, n) in MODELES_CHOIX.items()],
                    [{"text": "Garder ainsi", "callback_data": "quota:garder"}]]
-BOUTONS = [[{"text": "Sonnet 5.5 · medium", "callback_data": "quota:s:medium"},
-            {"text": "Sonnet 5.5 · high", "callback_data": "quota:s:high"}],
-           [{"text": "Rester sur Opus", "callback_data": "quota:o"}]]
+BOUTONS = [[{"text": f"{nom_modele(SONNET)} · medium", "callback_data": "quota:s:medium"},
+            {"text": f"{nom_modele(SONNET)} · high", "callback_data": "quota:s:high"}],
+           [{"text": f"Rester sur {nom_modele(OPUS)}", "callback_data": "quota:o"}]]
 
 def poster(texte, boutons=None):
     if os.environ.get("QUOTA_SEC"):
@@ -203,7 +220,6 @@ def reprise(etat):
 # Opus et Sonnet puisent dans la meme enveloppe de 7 jours (seven_day_opus est
 # vide). Le declencheur est donc l'AVANCE : % utilise moins % de semaine ecoulee.
 CONFIG = f"{HOME}/.hermes/config.yaml"
-OPUS, SONNET = "claude-opus-5-5", "claude-sonnet-5-5"
 # Depuis le 2026-10-25 plus aucune bascule seule : USER choisit au bouton, sans choix tout
 # reste sur Opus, et le jour suivant (minuit, Bangkok) tout revient sur Opus.
 EFFORTS = ("medium", "high")
@@ -230,7 +246,7 @@ def poser_modele(nom):
     return n != t
 
 SURCHARGES = f"{HOME}/.hermes/gateway_model_overrides.json"
-SONNET_TOPIC = "claude-sonnet-5-5"
+SONNET_TOPIC = SONNET
 
 def relire_surcharges():
     """Le gateway ne lit gateway_model_overrides.json qu'au demarrage : redemarrage au calme, detache."""
@@ -333,7 +349,7 @@ def vers_opus(ry):
 NOMS_COURTS = {m: n for m, n in MODELES_CHOIX.values()}
 
 def nom_court(m):
-    return NOMS_COURTS.get(m) or m.replace("claude-", "").replace("-5-5", " 5.5").replace("-", " ").capitalize()
+    return NOMS_COURTS.get(m) or nom_modele(m)
 
 def effort_global(nouveau=None):
     """Lit, ou pose, agent.reasoning_effort : relu par le gateway a chaque tour."""

@@ -133,11 +133,23 @@ alerter() {
     --data-urlencode "text=$1"
 }
 
+# Avis dans chaque topic dont un tour etait en vol, plus le topic QG.
+avis_topics() {
+  local tok t; tok=$(grep '^TELEGRAM_BOT_TOKEN=' "$HOME/.hermes/.env" | cut -d= -f2- | tr -d "'\"")
+  [ -z "$tok" ] && return
+  for t in $(printf '%s %s' "$QG_THREAD" "$TOPICS_VUS" | tr ', ' '\n\n' | grep -E '^[0-9]+$' | sort -u); do
+    curl -s -m 12 -o /dev/null "https://api.telegram.org/bot$tok/sendMessage" \
+      --data-urlencode "chat_id=$QG_CHAT" --data-urlencode "message_thread_id=$t" \
+      --data-urlencode "text=$1"
+  done
+}
+
 if [ "$COMPTE" = 1 ]; then
   actifs
   exit 0
 fi
 
+TOPICS_VUS=""
 debut=$(date +%s); alerte=0; dernier_n=-1
 while :; do
   n=$(actifs); [ -z "$n" ] && n=0
@@ -150,6 +162,7 @@ while :; do
   fi
   if [ "$n" != "$dernier_n" ]; then
     log "attente : $n tour(s) en vol : $(qui)"
+    TOPICS_VUS="$TOPICS_VUS $(qui)"
     dernier_n=$n
   fi
   if [ "$alerte" = "0" ] && [ $(( $(date +%s) - debut )) -ge "$ALERTE_APRES" ]; then
@@ -171,6 +184,7 @@ rid=$(sqlite3 "$DB" "INSERT INTO recus (session_id, action, debut, statut, detai
   VALUES ('gateway', 'redemarrage', strftime('%s','now'), 'debut', 'apres ${attendu} s d''attente');
   SELECT last_insert_rowid();" 2>/dev/null)
 log "redemarrage apres ${attendu} s d'attente (recu ${rid:-?})"
+avis_topics "Redemarrage du gateway en cours, retour dans ~30 s."
 REDEMARRAGE_ASSUME=1 systemctl --user restart hermes-gateway
 for _ in $(seq 1 40); do
   [ "$(systemctl --user is-active hermes-gateway)" = "active" ] && break
@@ -178,6 +192,7 @@ for _ in $(seq 1 40); do
 done
 etat=$(systemctl --user is-active hermes-gateway)
 log "gateway $etat a $(date +%H:%M:%S)"
+[ "$etat" = "active" ] && avis_topics "Gateway redemarre, il repond a nouveau."
 if [ "$etat" = "active" ] && [ -n "${rid:-}" ]; then
   sqlite3 "$DB" "UPDATE recus SET statut='fin', fin=strftime('%s','now') WHERE id=$rid;"
 fi
